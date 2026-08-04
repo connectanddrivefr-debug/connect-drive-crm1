@@ -23,7 +23,7 @@ export default function LoginPage() {
   return (
     <div className="login-screen">
       <form className="login-card" onSubmit={handleSubmit}>
-        <h1>Connect &amp; Drive</h1>
+        <img src="/logo.png" alt="Connect & Drive" className="login-logo" />
         <p className="subtitle">Connexion au CRM</p>
         <label>Email</label>
         <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />

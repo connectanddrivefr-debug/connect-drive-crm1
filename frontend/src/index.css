@@ -1,6 +1,6 @@
 :root {
-  --brand: #0f766e;
-  --brand-dark: #0b5c56;
+  --brand: #5b8fe0;
+  --brand-dark: #1f2b4d;
   --bg: #f5f7fa;
   --card-bg: #ffffff;
   --border: #e2e8f0;
@@ -31,9 +31,10 @@ button, input, select, textarea { font-family: inherit; font-size: 14px; }
 .topbar {
   display: flex; align-items: center; gap: 24px;
   background: var(--card-bg); border-bottom: 1px solid var(--border);
-  padding: 14px 24px;
+  padding: 10px 24px;
 }
-.topbar .brand { font-weight: 700; color: var(--brand-dark); }
+.topbar .brand { display: flex; align-items: center; }
+.brand-logo { height: 32px; width: auto; display: block; }
 .topbar nav { display: flex; gap: 16px; flex: 1; }
 .topbar nav a { color: var(--text); text-decoration: none; font-weight: 500; }
 .topbar nav a:hover { color: var(--brand); }
@@ -47,7 +48,8 @@ main { padding: 24px; max-width: 1400px; margin: 0 auto; }
   padding: 32px; width: 340px; display: flex; flex-direction: column; gap: 4px;
 }
 .login-card h1 { margin: 0 0 4px; color: var(--brand-dark); }
-.login-card .subtitle { color: var(--muted); margin: 0 0 16px; }
+.login-logo { width: 100%; max-width: 280px; height: auto; display: block; margin: 0 auto 4px; }
+.login-card .subtitle { color: var(--muted); margin: 0 0 16px; text-align: center; }
 .login-card label { font-size: 13px; margin-top: 10px; color: var(--muted); }
 .login-card input { padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; margin-top: 4px; }
 .login-card .btn-primary { margin-top: 18px; }

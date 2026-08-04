@@ -20,7 +20,9 @@ function Layout({ children }) {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <div className="brand">Connect &amp; Drive · CRM</div>
+        <Link to="/" className="brand">
+          <img src="/logo.png" alt="Connect & Drive" className="brand-logo" />
+        </Link>
         <nav>
           <Link to="/">Pipeline</Link>
           <Link to="/dashboard">Tableau de bord</Link>
