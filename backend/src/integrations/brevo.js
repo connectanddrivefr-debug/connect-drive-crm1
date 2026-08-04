@@ -8,18 +8,53 @@
 const SibApiV3Sdk = require("sib-api-v3-sdk");
 const prisma = require("../lib/prisma");
 
-// Numéros de téléphone affichés dans la signature des emails, par personne.
-// Pas encore de champ "phone" sur le compte utilisateur — à migrer vers la
+// URL publique du frontend (héberge le logo/bannière utilisés dans les emails).
+const APP_URL = process.env.APP_URL || "https://connect-drive-crm1-three.vercel.app";
+
+// Coordonnées affichées dans la signature des emails, par personne.
+// Pas encore de champs dédiés sur le compte utilisateur — à migrer vers la
 // base si on ajoute d'autres commerciaux plus tard.
 const PHONE_BY_EMAIL = {
   "connectanddrivefr@gmail.com": "01 89 70 88 73",
   "angelique@connectanddrive.fr": "07 80 97 18 95",
 };
 
+// Emails affichés dans la signature (en plus de l'adresse d'envoi elle-même).
+const EXTRA_EMAILS_BY_EMAIL = {
+  "connectanddrivefr@gmail.com": ["contact@connectanddrive.fr", "connectanddrivefr@gmail.com"],
+  "angelique@connectanddrive.fr": ["angelique@connectanddrive.fr"],
+};
+
 function getSignature(assignedUser) {
   if (!assignedUser) return "L'équipe Connect & Drive";
   const phone = PHONE_BY_EMAIL[assignedUser.email];
   return `${assignedUser.firstName} - Connect & Drive${phone ? `<br/>${phone}` : ""}`;
+}
+
+// Signature email complète: bannière visuelle Connect & Drive + bloc de
+// coordonnées (téléphone, emails, site, avis Google), reprenant la
+// signature réelle utilisée dans les boîtes mail de l'équipe.
+function getSignatureHtml(assignedUser) {
+  const firstName = assignedUser?.firstName || "L'équipe Connect & Drive";
+  const phone = assignedUser ? PHONE_BY_EMAIL[assignedUser.email] : null;
+  const emails = assignedUser ? EXTRA_EMAILS_BY_EMAIL[assignedUser.email] : null;
+
+  return `
+    <table cellpadding="0" cellspacing="0" style="margin-top:20px;border-top:1px solid #e2e8f0;padding-top:14px;">
+      <tr><td>
+        <img src="${APP_URL}/email-signature-banner.png" alt="Connect & Drive" style="max-width:420px;width:100%;height:auto;display:block;margin-bottom:8px;" />
+      </td></tr>
+      <tr><td style="font-size:13px;line-height:1.6;color:#1e293b;">
+        Bien cordialement,<br/>
+        <strong>${firstName}</strong><br/>
+        Connect & Drive<br/>
+        ${phone ? `${phone}<br/>` : ""}
+        ${emails ? `${emails.join(" / ")}<br/>` : ""}
+        <a href="https://www.connectanddrive.fr" style="color:#5b8fe0;">www.connectanddrive.fr</a><br/>
+        <a href="https://share.google/UHtDhJeC3zidJ" style="color:#5b8fe0;">Nos avis Google</a>
+      </td></tr>
+    </table>
+  `;
 }
 
 function getClient() {
@@ -79,16 +114,16 @@ async function sendEmail({ to, subject, htmlContent, leadId, type, senderName, s
 // Si un commercial est assigné (assignedUser), l'email est personnalisé à
 // son nom et les réponses du client arrivent dans sa boîte mail.
 async function sendLeadConfirmation(lead, assignedUser = null) {
-  const signature = getSignature(assignedUser);
+  const signatureHtml = getSignatureHtml(assignedUser);
   const intro = assignedUser
     ? `<p>Bonjour ${lead.firstName || ""},</p>
        <p>Je m'appelle ${assignedUser.firstName}, je m'occupe de votre demande concernant l'installation d'une borne de recharge (IRVE).</p>
        <p>Je vous appellerai <strong>dans les 24h</strong> pour échanger sur votre projet.</p>
-       <p>À très vite,<br/>${signature}</p>`
+       ${signatureHtml}`
     : `<p>Bonjour ${lead.firstName || ""},</p>
        <p>Nous avons bien reçu votre demande concernant l'installation d'une borne de recharge (IRVE).</p>
        <p>Un membre de notre équipe vous appellera <strong>dans les 24h</strong> pour échanger sur votre projet.</p>
-       <p>À très vite,<br/>${signature}</p>`;
+       ${signatureHtml}`;
 
   return sendEmail({
     to: lead.email,
@@ -126,6 +161,7 @@ async function sendInternalNewLeadNotif(lead, assignedUser = null) {
 // --- Règle 3: Devis sans réponse après X jours -> relance client ---
 async function sendQuoteReminder(quote, lead, assignedUser = null) {
   const signature = getSignature(assignedUser);
+  const signatureHtml = getSignatureHtml(assignedUser);
   return sendEmail({
     to: lead.email,
     subject: "Votre devis Connect & Drive — toujours d'actualité ?",
@@ -133,7 +169,7 @@ async function sendQuoteReminder(quote, lead, assignedUser = null) {
       <p>Bonjour ${lead.firstName || ""},</p>
       <p>Nous revenons vers vous concernant le devis envoyé le ${new Date(quote.sentAt).toLocaleDateString("fr-FR")}.</p>
       <p>N'hésitez pas à nous contacter si vous avez des questions ou souhaitez donner suite.</p>
-      <p>${signature}</p>
+      ${signatureHtml}
     `,
     leadId: lead.id,
     type: "RELANCE_DEVIS",
@@ -158,6 +194,7 @@ async function sendInternalReminderNotif(quote, lead) {
 // --- Règle 5: Lead signé -> confirmation + prochaines étapes ---
 async function sendSignatureConfirmation(lead, assignedUser = null) {
   const signature = getSignature(assignedUser);
+  const signatureHtml = getSignatureHtml(assignedUser);
   return sendEmail({
     to: lead.email,
     subject: "Bienvenue chez Connect & Drive — prochaines étapes",
@@ -165,7 +202,7 @@ async function sendSignatureConfirmation(lead, assignedUser = null) {
       <p>Bonjour ${lead.firstName || ""},</p>
       <p>Merci pour votre confiance ! Votre dossier est validé.</p>
       <p>Prochaines étapes: un technicien vous contactera pour planifier la visite technique puis l'installation.</p>
-      <p>${signature}</p>
+      ${signatureHtml}
     `,
     leadId: lead.id,
     type: "CONFIRMATION_SIGNATURE",
