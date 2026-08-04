@@ -1,0 +1,187 @@
+// Schéma Connect & Drive CRM
+// DB cible: PostgreSQL (Supabase / Neon). Pour dev local rapide, voir DATABASE_URL dans .env
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Utilisateurs & rôles (Phase 1: un seul compte admin, table prête pour Phase 2)
+// ---------------------------------------------------------------------------
+enum Role {
+  ADMIN       // Julien - tous droits
+  COMMERCIAL  // Angélique, Ilham - Phase 2
+  TECHNICIEN  // Kevin, Luc - Phase 2
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  firstName    String
+  lastName     String
+  role         Role     @default(ADMIN)
+
+  // Phase 2: routage géographique par zone (ex. plages de codes postaux)
+  zoneStart    String?  // ex. "92000"
+  zoneEnd      String?  // ex. "92999"
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  assignedLeads Lead[]  @relation("AssignedCommercial")
+  notes         Note[]
+  calls         CallLog[]
+}
+
+// ---------------------------------------------------------------------------
+// Pipeline leads
+// ---------------------------------------------------------------------------
+enum LeadStatus {
+  NOUVEAU
+  CONTACTE
+  DEVIS_ENVOYE
+  SIGNE
+  PERDU
+}
+
+enum LeadSource {
+  WEBFLOW
+  META
+  MANUEL
+  AUTRE
+}
+
+model Lead {
+  id            String     @id @default(uuid())
+
+  // Identité
+  firstName     String?
+  lastName      String?
+  email         String
+  phone         String?
+
+  // Adresse
+  address       String?
+  postalCode    String?
+  city          String?
+
+  source        LeadSource @default(MANUEL)
+  status        LeadStatus @default(NOUVEAU)
+
+  // Phase 2: attribution automatique par zone (codePostal -> commercial)
+  assignedTo    User?      @relation("AssignedCommercial", fields: [assignedToId], references: [id])
+  assignedToId  String?
+
+  notesText     String?    // notes libres (champ rapide en plus du modèle Note)
+
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  statusHistory StatusHistoryEntry[]
+  quotes        Quote[]
+  emailLogs     EmailLog[]
+  notes         Note[]
+  calls         CallLog[]
+
+  @@index([status])
+  @@index([postalCode])
+  @@index([email])
+}
+
+model StatusHistoryEntry {
+  id        String     @id @default(uuid())
+  lead      Lead       @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  leadId    String
+  fromStatus LeadStatus?
+  toStatus  LeadStatus
+  changedAt DateTime   @default(now())
+  changedBy String?    // email ou id user (nullable pour changements automatiques/système)
+}
+
+// ---------------------------------------------------------------------------
+// Devis
+// ---------------------------------------------------------------------------
+enum QuoteProduct {
+  V2C_TRYDAN
+  SMAPPEE_EV_WALL
+  AUTRE
+}
+
+enum QuoteStatus {
+  ENVOYE
+  RELANCE
+  ACCEPTE
+  REFUSE
+  EXPIRE
+}
+
+model Quote {
+  id          String       @id @default(uuid())
+  lead        Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  leadId      String
+
+  product     QuoteProduct
+  amount      Decimal      @db.Decimal(10, 2)
+  status      QuoteStatus  @default(ENVOYE)
+
+  sentAt      DateTime     @default(now())
+  lastReminderAt DateTime?
+  respondedAt DateTime?
+
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([status])
+  @@index([sentAt])
+}
+
+// ---------------------------------------------------------------------------
+// Historique des échanges
+// ---------------------------------------------------------------------------
+enum EmailType {
+  CONFIRMATION_LEAD
+  NOTIF_INTERNE
+  RELANCE_DEVIS
+  RAPPEL_INTERNE
+  CONFIRMATION_SIGNATURE
+  AUTRE
+}
+
+model EmailLog {
+  id        String    @id @default(uuid())
+  lead      Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  leadId    String
+  type      EmailType
+  recipient String
+  subject   String
+  brevoMessageId String?
+  sentAt    DateTime  @default(now())
+  success   Boolean   @default(true)
+  errorMsg  String?
+}
+
+model CallLog {
+  id        String   @id @default(uuid())
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  leadId    String
+  user      User?    @relation(fields: [userId], references: [id])
+  userId    String?
+  summary   String
+  callAt    DateTime @default(now())
+}
+
+model Note {
+  id        String   @id @default(uuid())
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  leadId    String
+  author    User?    @relation(fields: [authorId], references: [id])
+  authorId  String?
+  content   String
+  createdAt DateTime @default(now())
+}
