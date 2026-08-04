@@ -1,8 +1,8 @@
 // Route à usage unique pour créer le compte admin (Julien) une fois déployé
 // sur Vercel, puisque le sandbox de développement ne peut pas atteindre la
 // base Supabase directement (seul Vercel peut le faire en prod).
-// Appeler une fois: GET /api/setup/seed-admin avec header
-// Authorization: Bearer <SETUP_SECRET>
+// Appeler une fois, directement dans le navigateur:
+// GET /api/setup/seed-admin?secret=<SETUP_SECRET>
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const prisma = require("../lib/prisma");
@@ -10,8 +10,8 @@ const prisma = require("../lib/prisma");
 const router = express.Router();
 
 router.get("/seed-admin", async (req, res) => {
-  const auth = req.headers.authorization;
-  if (!process.env.SETUP_SECRET || auth !== `Bearer ${process.env.SETUP_SECRET}`) {
+  const provided = req.query.secret || (req.headers.authorization || "").replace("Bearer ", "");
+  if (!process.env.SETUP_SECRET || provided !== process.env.SETUP_SECRET) {
     return res.status(401).json({ error: "Non autorisé" });
   }
 
