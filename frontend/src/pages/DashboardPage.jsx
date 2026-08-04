@@ -29,6 +29,14 @@ export default function DashboardPage() {
 
   if (!stats) return <p>Chargement…</p>;
 
+  // Seuils demandés: >=35% vert, 20-35% orange, <20% rouge
+  function rateColor(rate) {
+    if (rate == null) return "#94a3b8"; // gris: pas encore de devis
+    if (rate >= 35) return "#16a34a";
+    if (rate >= 20) return "#f59e0b";
+    return "#dc2626";
+  }
+
   return (
     <div className="dashboard-page">
       <div className="kanban-header">
@@ -37,6 +45,23 @@ export default function DashboardPage() {
           {exporting ? "Export…" : "Exporter les leads (CSV)"}
         </button>
       </div>
+
+      {stats.revenueByCommercial && stats.revenueByCommercial.length > 0 && (
+        <div className="stats-grid" style={{ marginBottom: 16 }}>
+          {stats.revenueByCommercial.map((r) => (
+            <div key={r.key} className="stat-card" style={{ borderTop: `4px solid ${rateColor(r.rate)}` }}>
+              <div className="stat-value" style={{ color: rateColor(r.rate) }}>
+                {r.rate != null ? `${r.rate.toFixed(0)}%` : "—"}
+              </div>
+              <div className="stat-label">{r.name}</div>
+              <div className="muted" style={{ marginTop: 4 }}>
+                {r.signedAmount.toLocaleString("fr-FR")} € signés / {r.totalAmount.toLocaleString("fr-FR")} € devisés
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="stats-grid">
         <div className="stat-card">
           <div className="stat-value">{stats.total}</div>

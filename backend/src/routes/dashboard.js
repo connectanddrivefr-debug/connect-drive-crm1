@@ -60,6 +60,49 @@ router.get("/stats", async (req, res) => {
     orderBy: { createdAt: "asc" },
   });
 
+  // Chiffre d'affaires signé / montant total des devis envoyés, par
+  // commercial + vue globale. Seuils d'affichage définis côté frontend
+  // (>=35% vert, 20-35% orange, <20% rouge).
+  const [quotes, users] = await Promise.all([
+    prisma.quote.findMany({
+      select: { amount: true, status: true, lead: { select: { assignedToId: true } } },
+    }),
+    prisma.user.findMany({ select: { id: true, firstName: true, lastName: true, role: true } }),
+  ]);
+
+  function computeBucket(quotesInBucket) {
+    const totalAmount = quotesInBucket.reduce((sum, q) => sum + Number(q.amount), 0);
+    const signedAmount = quotesInBucket
+      .filter((q) => q.status === "ACCEPTE")
+      .reduce((sum, q) => sum + Number(q.amount), 0);
+    return {
+      totalAmount,
+      signedAmount,
+      rate: totalAmount > 0 ? (signedAmount / totalAmount) * 100 : null,
+    };
+  }
+
+  let revenueByCommercial = [
+    { key: "global", name: "Global", ...computeBucket(quotes) },
+    {
+      key: "unassigned",
+      name: "Non assigné",
+      ...computeBucket(quotes.filter((q) => !q.lead.assignedToId)),
+    },
+    ...users.map((u) => ({
+      key: u.id,
+      name: `${u.firstName} ${u.lastName}`,
+      role: u.role,
+      ...computeBucket(quotes.filter((q) => q.lead.assignedToId === u.id)),
+    })),
+  ];
+
+  // Un commercial ne voit que son propre résultat, pas celui des collègues
+  // ni le CA global de l'entreprise.
+  if (req.user.role === "COMMERCIAL") {
+    revenueByCommercial = revenueByCommercial.filter((r) => r.key === req.user.id);
+  }
+
   res.json({
     total,
     byStatus,
@@ -67,6 +110,7 @@ router.get("/stats", async (req, res) => {
     conversionRate, // % de leads "clos" (signé ou perdu) qui ont été signés
     avgDaysToSign,
     staleLeads,
+    revenueByCommercial,
   });
 });
 
