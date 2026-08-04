@@ -15,12 +15,12 @@ async function runQuoteReminders() {
       sentAt: { lte: cutoff },
       lastReminderAt: null, // une seule relance automatique par devis (V1)
     },
-    include: { lead: true },
+    include: { lead: { include: { assignedTo: true } } },
   });
 
   for (const quote of staleQuotes) {
     try {
-      await sendQuoteReminder(quote, quote.lead);
+      await sendQuoteReminder(quote, quote.lead, quote.lead.assignedTo);
       await sendInternalReminderNotif(quote, quote.lead);
       await prisma.quote.update({
         where: { id: quote.id },

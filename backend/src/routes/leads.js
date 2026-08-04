@@ -120,7 +120,7 @@ router.post("/", async (req, res) => {
   // à son nom (voir integrations/brevo.js).
   try {
     await sendLeadConfirmation(lead, lead.assignedTo);
-    await sendInternalNewLeadNotif(lead);
+    await sendInternalNewLeadNotif(lead, lead.assignedTo);
   } catch (err) {
     console.error("[Brevo] échec envoi email création lead:", err.message);
   }
@@ -131,10 +131,26 @@ router.post("/", async (req, res) => {
 // PATCH /api/leads/:id  (édition des infos)
 router.patch("/:id", async (req, res) => {
   const { firstName, lastName, email, phone, address, postalCode, city, notesText, assignedToId } = req.body;
+
+  const before = await prisma.lead.findUnique({ where: { id: req.params.id } });
+  const isNewAssignment = assignedToId !== undefined && assignedToId !== before?.assignedToId && assignedToId;
+
   const lead = await prisma.lead.update({
     where: { id: req.params.id },
     data: { firstName, lastName, email, phone, address, postalCode, city, notesText, assignedToId },
+    include: { assignedTo: true },
   });
+
+  // Quand un lead est assigné (ou réassigné) à un commercial, il reçoit un
+  // email de prise en charge personnalisé, envoyé depuis l'adresse du commercial.
+  if (isNewAssignment && lead.email) {
+    try {
+      await sendLeadConfirmation(lead, lead.assignedTo);
+    } catch (err) {
+      console.error("[Brevo] échec envoi email assignation:", err.message);
+    }
+  }
+
   res.json(lead);
 });
 
@@ -160,12 +176,14 @@ router.patch("/:id/status", async (req, res) => {
         },
       },
     },
+    include: { assignedTo: true },
   });
 
   // Automatisation: lead signé -> email de confirmation + prochaines étapes
+  // (personnalisé au nom du commercial assigné, envoyé depuis sa propre adresse)
   if (status === "SIGNE") {
     try {
-      await sendSignatureConfirmation(lead);
+      await sendSignatureConfirmation(lead, lead.assignedTo);
     } catch (err) {
       console.error("[Brevo] échec envoi email signature:", err.message);
     }

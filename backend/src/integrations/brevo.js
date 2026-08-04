@@ -14,7 +14,7 @@ function getClient() {
   return new SibApiV3Sdk.TransactionalEmailsApi();
 }
 
-async function sendEmail({ to, subject, htmlContent, leadId, type, senderName, replyTo }) {
+async function sendEmail({ to, subject, htmlContent, leadId, type, senderName, senderEmail, replyTo }) {
   if (!process.env.BREVO_API_KEY) {
     console.warn(`[Brevo] BREVO_API_KEY absent — email "${type}" non envoyé (mode simulation).`);
     if (leadId) {
@@ -27,9 +27,13 @@ async function sendEmail({ to, subject, htmlContent, leadId, type, senderName, r
 
   const api = getClient();
   const payload = {
-    // Nom d'expéditeur personnalisable (ex: "Angélique - Connect & Drive")
-    // tout en gardant l'adresse technique vérifiée sur Brevo.
-    sender: { email: process.env.BREVO_SENDER_EMAIL, name: senderName || process.env.BREVO_SENDER_NAME },
+    // Expéditeur personnalisable: quand un lead est assigné à un commercial,
+    // l'email part directement de son adresse Brevo vérifiée (ex: angelique@
+    // connectanddrive.fr) plutôt que de l'adresse générique.
+    sender: {
+      email: senderEmail || process.env.BREVO_SENDER_EMAIL,
+      name: senderName || process.env.BREVO_SENDER_NAME,
+    },
     to: [{ email: to }],
     subject,
     htmlContent,
@@ -78,13 +82,15 @@ async function sendLeadConfirmation(lead, assignedUser = null) {
     leadId: lead.id,
     type: "CONFIRMATION_LEAD",
     senderName: assignedUser ? `${assignedUser.firstName} - Connect & Drive` : undefined,
+    senderEmail: assignedUser?.email,
     replyTo: assignedUser?.email,
   });
 }
 
 // --- Règle 2: Nouveau lead -> notification interne ---
-async function sendInternalNewLeadNotif(lead) {
-  const to = process.env.ADMIN_EMAIL; // Phase 2: router vers le commercial assigné
+// Envoyée au commercial assigné s'il y en a un, sinon à Julien (admin).
+async function sendInternalNewLeadNotif(lead, assignedUser = null) {
+  const to = assignedUser?.email || process.env.ADMIN_EMAIL;
   return sendEmail({
     to,
     subject: `Nouveau lead: ${lead.firstName || ""} ${lead.lastName || ""} (${lead.source})`,
@@ -103,7 +109,8 @@ async function sendInternalNewLeadNotif(lead) {
 }
 
 // --- Règle 3: Devis sans réponse après X jours -> relance client ---
-async function sendQuoteReminder(quote, lead) {
+async function sendQuoteReminder(quote, lead, assignedUser = null) {
+  const signature = assignedUser ? `${assignedUser.firstName} - Connect & Drive` : "L'équipe Connect & Drive";
   return sendEmail({
     to: lead.email,
     subject: "Votre devis Connect & Drive — toujours d'actualité ?",
@@ -111,10 +118,13 @@ async function sendQuoteReminder(quote, lead) {
       <p>Bonjour ${lead.firstName || ""},</p>
       <p>Nous revenons vers vous concernant le devis envoyé le ${new Date(quote.sentAt).toLocaleDateString("fr-FR")}.</p>
       <p>N'hésitez pas à nous contacter si vous avez des questions ou souhaitez donner suite.</p>
-      <p>L'équipe Connect & Drive</p>
+      <p>${signature}</p>
     `,
     leadId: lead.id,
     type: "RELANCE_DEVIS",
+    senderName: assignedUser ? signature : undefined,
+    senderEmail: assignedUser?.email,
+    replyTo: assignedUser?.email,
   });
 }
 
@@ -131,7 +141,8 @@ async function sendInternalReminderNotif(quote, lead) {
 }
 
 // --- Règle 5: Lead signé -> confirmation + prochaines étapes ---
-async function sendSignatureConfirmation(lead) {
+async function sendSignatureConfirmation(lead, assignedUser = null) {
+  const signature = assignedUser ? `${assignedUser.firstName} - Connect & Drive` : "L'équipe Connect & Drive";
   return sendEmail({
     to: lead.email,
     subject: "Bienvenue chez Connect & Drive — prochaines étapes",
@@ -139,10 +150,13 @@ async function sendSignatureConfirmation(lead) {
       <p>Bonjour ${lead.firstName || ""},</p>
       <p>Merci pour votre confiance ! Votre dossier est validé.</p>
       <p>Prochaines étapes: un technicien vous contactera pour planifier la visite technique puis l'installation.</p>
-      <p>L'équipe Connect & Drive</p>
+      <p>${signature}</p>
     `,
     leadId: lead.id,
     type: "CONFIRMATION_SIGNATURE",
+    senderName: assignedUser ? signature : undefined,
+    senderEmail: assignedUser?.email,
+    replyTo: assignedUser?.email,
   });
 }
 
