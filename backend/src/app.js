@@ -12,6 +12,7 @@ const dashboardRoutes = require("./routes/dashboard");
 const webhookRoutes = require("./routes/webhooks");
 const cronRoutes = require("./routes/cron");
 const setupRoutes = require("./routes/setup");
+const userRoutes = require("./routes/users");
 
 const app = express();
 
@@ -29,6 +30,7 @@ app.use("/api/webhooks", webhookRoutes);
 app.use("/api/cron", cronRoutes);
 // Route à usage unique pour créer le compte admin après déploiement
 app.use("/api/setup", setupRoutes);
+app.use("/api/users", userRoutes);
 
 // Erreurs non gérées -> réponse JSON propre plutôt qu'un crash silencieux
 app.use((err, req, res, next) => {

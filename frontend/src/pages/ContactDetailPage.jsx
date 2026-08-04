@@ -22,6 +22,7 @@ export default function ContactDetailPage() {
   const [noteText, setNoteText] = useState("");
   const [callText, setCallText] = useState("");
   const [quoteForm, setQuoteForm] = useState({ product: "V2C_TRYDAN", amount: "" });
+  const [users, setUsers] = useState(null); // null = pas encore chargé / pas admin
 
   async function load() {
     const data = await api.getLead(id);
@@ -30,7 +31,15 @@ export default function ContactDetailPage() {
 
   useEffect(() => {
     load();
+    // Échoue silencieusement si l'utilisateur n'est pas admin (403) —
+    // le sélecteur d'assignation reste simplement caché dans ce cas.
+    api.getUsers().then(setUsers).catch(() => setUsers(null));
   }, [id]);
+
+  async function changeAssignment(userId) {
+    await api.updateLead(id, { assignedToId: userId || null });
+    load();
+  }
 
   if (!lead) return <p>Chargement…</p>;
 
@@ -92,6 +101,18 @@ export default function ContactDetailPage() {
           <p>Adresse: {lead.address || "—"}</p>
           <p>Code postal / Ville: {lead.postalCode || "—"} {lead.city || ""}</p>
           {lead.notesText && <p>Notes initiales: {lead.notesText}</p>}
+          {users && (
+            <p>
+              Commercial assigné:{" "}
+              <select value={lead.assignedToId || ""} onChange={(e) => changeAssignment(e.target.value)}>
+                <option value="">— Non assigné —</option>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>{u.firstName} {u.lastName} ({u.role})</option>
+                ))}
+              </select>
+            </p>
+          )}
+          {!users && lead.assignedTo && <p>Commercial assigné: {lead.assignedTo.firstName} {lead.assignedTo.lastName}</p>}
         </section>
 
         <section className="card">

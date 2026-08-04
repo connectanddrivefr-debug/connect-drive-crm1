@@ -1,13 +1,18 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../api/client";
 
 export default function NewLeadModal({ onClose, onCreated }) {
   const [form, setForm] = useState({
     firstName: "", lastName: "", email: "", phone: "",
-    address: "", postalCode: "", city: "", notesText: "",
+    address: "", postalCode: "", city: "", notesText: "", assignedToId: "",
   });
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [users, setUsers] = useState(null);
+
+  useEffect(() => {
+    api.getUsers().then(setUsers).catch(() => setUsers(null));
+  }, []);
 
   function update(field, value) {
     setForm((f) => ({ ...f, [field]: value }));
@@ -18,7 +23,7 @@ export default function NewLeadModal({ onClose, onCreated }) {
     setSaving(true);
     setError("");
     try {
-      await api.createLead({ ...form, source: "MANUEL" });
+      await api.createLead({ ...form, assignedToId: form.assignedToId || undefined, source: "MANUEL" });
       onCreated();
     } catch (err) {
       setError(err.message);
@@ -61,6 +66,18 @@ export default function NewLeadModal({ onClose, onCreated }) {
             <input value={form.city} onChange={(e) => update("city", e.target.value)} />
           </div>
         </div>
+        {users && users.length > 0 && (
+          <>
+            <label>Commercial assigné (optionnel)</label>
+            <select value={form.assignedToId} onChange={(e) => update("assignedToId", e.target.value)}>
+              <option value="">— Non assigné —</option>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>{u.firstName} {u.lastName} ({u.role})</option>
+              ))}
+            </select>
+          </>
+        )}
+
         <label>Notes</label>
         <textarea value={form.notesText} onChange={(e) => update("notesText", e.target.value)} rows={3} />
 

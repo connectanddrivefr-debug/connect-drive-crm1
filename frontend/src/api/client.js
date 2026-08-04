@@ -42,6 +42,17 @@ export const api = {
   updateQuote: (id, data) => request(`/quotes/${id}`, { method: "PATCH", body: data }),
 
   getStats: () => request("/dashboard/stats"),
+
+  getUsers: () => request("/users"),
+
+  exportLeadsCsv: async () => {
+    const token = getToken();
+    const res = await fetch(`${BASE_URL}/leads/export/csv`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error("Échec de l'export");
+    return res.blob();
+  },
 };
 
 export { getToken };

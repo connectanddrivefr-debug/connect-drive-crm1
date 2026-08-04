@@ -39,12 +39,34 @@ router.get("/stats", async (req, res) => {
   const issues = perdus + signes;
   const conversionRate = issues > 0 ? (signes / issues) * 100 : null;
 
+  // Leads "non traités depuis 48h": encore au statut Nouveau ou Contacté,
+  // créés il y a plus de 48h. Visible par l'admin (vue globale, tous
+  // commerciaux confondus) pour repérer ce qui traîne.
+  const cutoff48h = new Date(Date.now() - 48 * 60 * 60 * 1000);
+  const staleWhere = {
+    status: { in: ["NOUVEAU", "CONTACTE"] },
+    createdAt: { lte: cutoff48h },
+  };
+  if (req.user.role === "COMMERCIAL") {
+    staleWhere.assignedToId = req.user.id;
+  }
+  const staleLeads = await prisma.lead.findMany({
+    where: staleWhere,
+    select: {
+      id: true, firstName: true, lastName: true, email: true,
+      status: true, createdAt: true, source: true,
+      assignedTo: { select: { firstName: true, lastName: true } },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
   res.json({
     total,
     byStatus,
     bySource,
     conversionRate, // % de leads "clos" (signé ou perdu) qui ont été signés
     avgDaysToSign,
+    staleLeads,
   });
 });
 

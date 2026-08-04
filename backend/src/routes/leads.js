@@ -1,6 +1,6 @@
 const express = require("express");
 const prisma = require("../lib/prisma");
-const { requireAuth } = require("../middleware/auth");
+const { requireAuth, requireRole } = require("../middleware/auth");
 const {
   sendLeadConfirmation,
   sendInternalNewLeadNotif,
@@ -14,10 +14,18 @@ const VALID_STATUSES = ["NOUVEAU", "CONTACTE", "DEVIS_ENVOYE", "SIGNE", "PERDU"]
 
 // GET /api/leads?status=&source=&q=
 router.get("/", async (req, res) => {
-  const { status, source, q } = req.query;
+  const { status, source, q, unassignedOnly } = req.query;
   const where = {};
   if (status) where.status = status;
   if (source) where.source = source;
+  // Phase 2: un commercial ne voit que ses propres leads assignés.
+  // L'admin (Julien) voit tout, y compris les leads d'Angélique/Ilham.
+  if (req.user.role === "COMMERCIAL") {
+    where.assignedToId = req.user.id;
+  }
+  if (unassignedOnly === "true") {
+    where.assignedToId = null;
+  }
   if (q) {
     where.OR = [
       { firstName: { contains: q, mode: "insensitive" } },
@@ -33,6 +41,38 @@ router.get("/", async (req, res) => {
     include: { quotes: true, assignedTo: true },
   });
   res.json(leads);
+});
+
+// GET /api/leads/export/csv — export complet (admin uniquement)
+router.get("/export/csv", requireRole("ADMIN"), async (req, res) => {
+  const leads = await prisma.lead.findMany({
+    orderBy: { createdAt: "desc" },
+    include: { quotes: true, assignedTo: true },
+  });
+
+  const escape = (v) => {
+    if (v === null || v === undefined) return "";
+    const s = String(v).replace(/"/g, '""');
+    return /[",\n]/.test(s) ? `"${s}"` : s;
+  };
+
+  const header = [
+    "Prénom", "Nom", "Email", "Téléphone", "Adresse", "Code postal", "Ville",
+    "Source", "Statut", "Commercial assigné", "Montant devis", "Notes", "Créé le",
+  ];
+  const rows = leads.map((l) => [
+    l.firstName, l.lastName, l.email, l.phone, l.address, l.postalCode, l.city,
+    l.source, l.status,
+    l.assignedTo ? `${l.assignedTo.firstName} ${l.assignedTo.lastName}` : "",
+    l.quotes[0] ? Number(l.quotes[0].amount) : "",
+    l.notesText, l.createdAt.toISOString(),
+  ]);
+
+  const csv = [header, ...rows].map((r) => r.map(escape).join(",")).join("\n");
+
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="leads-connect-drive-${new Date().toISOString().slice(0, 10)}.csv"`);
+  res.send("﻿" + csv); // BOM pour un affichage correct des accents dans Excel
 });
 
 // GET /api/leads/:id (fiche contact complète)
@@ -57,7 +97,7 @@ router.post("/", async (req, res) => {
   const {
     firstName, lastName, email, phone,
     address, postalCode, city,
-    source = "MANUEL", notesText,
+    source = "MANUEL", notesText, assignedToId,
   } = req.body;
 
   if (!email) return res.status(400).json({ error: "Email requis" });
@@ -66,17 +106,20 @@ router.post("/", async (req, res) => {
     data: {
       firstName, lastName, email, phone,
       address, postalCode, city,
-      source, notesText,
+      source, notesText, assignedToId,
       status: "NOUVEAU",
       statusHistory: {
         create: { toStatus: "NOUVEAU", changedBy: req.user?.email || "system" },
       },
     },
+    include: { assignedTo: true },
   });
 
   // Automatisations Brevo déclenchées à la création (§5 cahier des charges)
+  // Si un commercial est assigné, l'email de confirmation est personnalisé
+  // à son nom (voir integrations/brevo.js).
   try {
-    await sendLeadConfirmation(lead);
+    await sendLeadConfirmation(lead, lead.assignedTo);
     await sendInternalNewLeadNotif(lead);
   } catch (err) {
     console.error("[Brevo] échec envoi email création lead:", err.message);

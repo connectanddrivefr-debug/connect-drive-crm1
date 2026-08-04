@@ -14,7 +14,7 @@ function getClient() {
   return new SibApiV3Sdk.TransactionalEmailsApi();
 }
 
-async function sendEmail({ to, subject, htmlContent, leadId, type }) {
+async function sendEmail({ to, subject, htmlContent, leadId, type, senderName, replyTo }) {
   if (!process.env.BREVO_API_KEY) {
     console.warn(`[Brevo] BREVO_API_KEY absent — email "${type}" non envoyé (mode simulation).`);
     if (leadId) {
@@ -27,11 +27,17 @@ async function sendEmail({ to, subject, htmlContent, leadId, type }) {
 
   const api = getClient();
   const payload = {
-    sender: { email: process.env.BREVO_SENDER_EMAIL, name: process.env.BREVO_SENDER_NAME },
+    // Nom d'expéditeur personnalisable (ex: "Angélique - Connect & Drive")
+    // tout en gardant l'adresse technique vérifiée sur Brevo.
+    sender: { email: process.env.BREVO_SENDER_EMAIL, name: senderName || process.env.BREVO_SENDER_NAME },
     to: [{ email: to }],
     subject,
     htmlContent,
   };
+  // Les réponses du client arrivent directement dans la boîte du commercial assigné.
+  if (replyTo) {
+    payload.replyTo = { email: replyTo };
+  }
 
   try {
     const result = await api.sendTransacEmail(payload);
@@ -52,18 +58,27 @@ async function sendEmail({ to, subject, htmlContent, leadId, type }) {
 }
 
 // --- Règle 1: Nouveau lead -> email de confirmation au client ---
-async function sendLeadConfirmation(lead) {
+// Si un commercial est assigné (assignedUser), l'email est personnalisé à
+// son nom et les réponses du client arrivent dans sa boîte mail.
+async function sendLeadConfirmation(lead, assignedUser = null) {
+  const intro = assignedUser
+    ? `<p>Bonjour ${lead.firstName || ""},</p>
+       <p>Je m'appelle ${assignedUser.firstName}, je m'occupe de votre demande concernant l'installation d'une borne de recharge (IRVE).</p>
+       <p>Je vous appellerai <strong>demain après-midi</strong> pour échanger sur votre projet.</p>
+       <p>À très vite,<br/>${assignedUser.firstName} - Connect & Drive</p>`
+    : `<p>Bonjour ${lead.firstName || ""},</p>
+       <p>Nous avons bien reçu votre demande concernant l'installation d'une borne de recharge (IRVE).</p>
+       <p>Un membre de notre équipe vous appellera <strong>demain après-midi</strong> pour échanger sur votre projet.</p>
+       <p>À très vite,<br/>L'équipe Connect & Drive</p>`;
+
   return sendEmail({
     to: lead.email,
     subject: "Votre demande a bien été reçue — Connect & Drive",
-    htmlContent: `
-      <p>Bonjour ${lead.firstName || ""},</p>
-      <p>Nous avons bien reçu votre demande concernant l'installation d'une borne de recharge (IRVE).</p>
-      <p>Un membre de notre équipe vous appellera <strong>demain après-midi</strong> pour échanger sur votre projet.</p>
-      <p>À très vite,<br/>L'équipe Connect & Drive</p>
-    `,
+    htmlContent: intro,
     leadId: lead.id,
     type: "CONFIRMATION_LEAD",
+    senderName: assignedUser ? `${assignedUser.firstName} - Connect & Drive` : undefined,
+    replyTo: assignedUser?.email,
   });
 }
 

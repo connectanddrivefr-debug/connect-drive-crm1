@@ -1,18 +1,42 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../api/client";
 
 export default function DashboardPage() {
   const [stats, setStats] = useState(null);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     api.getStats().then(setStats);
   }, []);
 
+  async function handleExport() {
+    setExporting(true);
+    try {
+      const blob = await api.exportLeadsCsv();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `leads-connect-drive-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(`Erreur export: ${err.message}`);
+    } finally {
+      setExporting(false);
+    }
+  }
+
   if (!stats) return <p>Chargement…</p>;
 
   return (
     <div className="dashboard-page">
-      <h1>Tableau de bord</h1>
+      <div className="kanban-header">
+        <h1>Tableau de bord</h1>
+        <button className="btn-primary" onClick={handleExport} disabled={exporting}>
+          {exporting ? "Export…" : "Exporter les leads (CSV)"}
+        </button>
+      </div>
       <div className="stats-grid">
         <div className="stat-card">
           <div className="stat-value">{stats.total}</div>
@@ -52,6 +76,24 @@ export default function DashboardPage() {
           ))}
         </div>
       </div>
+
+      {stats.staleLeads && stats.staleLeads.length > 0 && (
+        <div className="card" style={{ marginTop: 16 }}>
+          <h3>⚠️ Leads non traités depuis plus de 48h ({stats.staleLeads.length})</h3>
+          <ul className="timeline">
+            {stats.staleLeads.map((l) => (
+              <li key={l.id}>
+                <Link to={`/leads/${l.id}`}>
+                  {l.firstName || ""} {l.lastName || ""} {!l.firstName && !l.lastName && l.email}
+                </Link>
+                {" — "}{l.status} — {l.source}
+                {l.assignedTo && ` — assigné à ${l.assignedTo.firstName}`}
+                {" — reçu le "}{new Date(l.createdAt).toLocaleDateString("fr-FR")}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
