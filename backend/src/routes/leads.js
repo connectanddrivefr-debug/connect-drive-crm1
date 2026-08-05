@@ -4,7 +4,6 @@ const { requireAuth, requireRole } = require("../middleware/auth");
 const {
   sendLeadConfirmation,
   sendInternalNewLeadNotif,
-  sendSignatureConfirmation,
 } = require("../integrations/brevo");
 
 const router = express.Router();
@@ -179,15 +178,9 @@ router.patch("/:id/status", async (req, res) => {
     include: { assignedTo: true },
   });
 
-  // Automatisation: lead signé -> email de confirmation + prochaines étapes
-  // (personnalisé au nom du commercial assigné, envoyé depuis sa propre adresse)
-  if (status === "SIGNE") {
-    try {
-      await sendSignatureConfirmation(lead, lead.assignedTo);
-    } catch (err) {
-      console.error("[Brevo] échec envoi email signature:", err.message);
-    }
-  }
+  // Automatisation "Bienvenue chez Connect & Drive — prochaines étapes"
+  // désactivée sur demande: plus d'email envoyé automatiquement au passage
+  // en statut SIGNE.
 
   res.json(lead);
 });
