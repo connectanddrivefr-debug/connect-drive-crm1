@@ -132,6 +132,14 @@ router.patch("/:id", async (req, res) => {
   const { firstName, lastName, email, phone, address, postalCode, city, notesText, assignedToId } = req.body;
 
   const before = await prisma.lead.findUnique({ where: { id: req.params.id } });
+  if (!before) return res.status(404).json({ error: "Lead introuvable" });
+
+  // Une fois le lead signé, l'assignation est verrouillée (on ne change plus
+  // le commercial qui a conclu la vente).
+  if (before.status === "SIGNE" && assignedToId !== undefined && assignedToId !== before.assignedToId) {
+    return res.status(400).json({ error: "Impossible de réassigner un lead déjà signé" });
+  }
+
   const isNewAssignment = assignedToId !== undefined && assignedToId !== before?.assignedToId && assignedToId;
 
   const lead = await prisma.lead.update({

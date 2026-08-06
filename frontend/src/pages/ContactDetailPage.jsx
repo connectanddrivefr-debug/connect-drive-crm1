@@ -101,7 +101,7 @@ export default function ContactDetailPage() {
           <p>Adresse: {lead.address || "—"}</p>
           <p>Code postal / Ville: {lead.postalCode || "—"} {lead.city || ""}</p>
           {lead.notesText && <p>Notes initiales: {lead.notesText}</p>}
-          {users && (
+          {users && lead.status !== "SIGNE" && (
             <p>
               Commercial assigné:{" "}
               <select value={lead.assignedToId || ""} onChange={(e) => changeAssignment(e.target.value)}>
@@ -112,7 +112,13 @@ export default function ContactDetailPage() {
               </select>
             </p>
           )}
-          {!users && lead.assignedTo && <p>Commercial assigné: {lead.assignedTo.firstName} {lead.assignedTo.lastName}</p>}
+          {lead.status === "SIGNE" && (
+            <p>
+              Commercial assigné: {lead.assignedTo ? `${lead.assignedTo.firstName} ${lead.assignedTo.lastName}` : "— Non assigné —"}
+              <span className="muted"> (verrouillé, lead signé)</span>
+            </p>
+          )}
+          {!users && lead.status !== "SIGNE" && lead.assignedTo && <p>Commercial assigné: {lead.assignedTo.firstName} {lead.assignedTo.lastName}</p>}
         </section>
 
         <section className="card">
