@@ -105,6 +105,8 @@ main { padding: 24px; max-width: 1400px; margin: 0 auto; }
 
 /* Contact page */
 .back-link { color: var(--brand-dark); text-decoration: none; font-size: 13px; }
+.phone-link { color: var(--brand-dark); text-decoration: underline; cursor: pointer; }
+.phone-link:hover { color: var(--brand); }
 .contact-header { display: flex; align-items: center; gap: 12px; margin: 10px 0 16px; }
 .status-selector { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
 .status-pill {

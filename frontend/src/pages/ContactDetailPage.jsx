@@ -97,7 +97,16 @@ export default function ContactDetailPage() {
         <section className="card">
           <h3>Coordonnées</h3>
           <p>Email: {lead.email}</p>
-          <p>Téléphone: {lead.phone || "—"}</p>
+          <p>
+            Téléphone:{" "}
+            {lead.phone ? (
+              <a href={`tel:${lead.phone}`} className="phone-link" title="Cliquer pour appeler — sélectionner le texte pour copier">
+                {lead.phone}
+              </a>
+            ) : (
+              "—"
+            )}
+          </p>
           <p>Adresse: {lead.address || "—"}</p>
           <p>Code postal / Ville: {lead.postalCode || "—"} {lead.city || ""}</p>
           {lead.notesText && <p>Notes initiales: {lead.notesText}</p>}
