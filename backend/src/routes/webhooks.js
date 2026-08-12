@@ -163,4 +163,112 @@ async function createFallbackLead({ leadgenId, formId, adId, error }) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Webflow — formulaire de devis du site (webhook natif "Form submission")
+// ---------------------------------------------------------------------------
+// Configuration côté Webflow: Site settings > Integrations > Webhooks >
+// Add webhook > Trigger = "Form submission" > URL = <API_URL>/api/webhooks/webflow
+// Webflow affiche une "Secret key" une seule fois à la création: à copier
+// dans la variable d'environnement WEBFLOW_WEBHOOK_SECRET.
+function verifyWebflowSignature(req) {
+  if (!process.env.WEBFLOW_WEBHOOK_SECRET) return true; // pas de secret configuré -> pas de vérification (dev)
+  const timestamp = req.headers["x-webflow-timestamp"];
+  const signature = req.headers["x-webflow-signature"];
+  if (!timestamp || !signature) return false;
+
+  // Rejette les requêtes trop anciennes (protection anti-rejeu)
+  if (Math.abs(Date.now() - parseInt(timestamp, 10)) > 5 * 60 * 1000) return false;
+
+  const body = req.rawBody || JSON.stringify(req.body);
+  const expected = crypto
+    .createHmac("sha256", process.env.WEBFLOW_WEBHOOK_SECRET)
+    .update(`${timestamp}:${body}`)
+    .digest("hex");
+
+  try {
+    return crypto.timingSafeEqual(Buffer.from(expected, "hex"), Buffer.from(signature, "hex"));
+  } catch {
+    return false;
+  }
+}
+
+// Le nom exact des champs dépend de ce qui est configuré dans le formulaire
+// Webflow (labels visibles). On teste plusieurs variantes FR/EN courantes.
+function pickField(data, candidates) {
+  const keys = Object.keys(data);
+  for (const candidate of candidates) {
+    const match = keys.find((k) => k.trim().toLowerCase() === candidate);
+    if (match && data[match]) return String(data[match]).trim();
+  }
+  return null;
+}
+
+function mapWebflowFields(data) {
+  const firstName = pickField(data, ["prénom", "prenom", "first name", "firstname"]);
+  const lastName = pickField(data, ["nom", "last name", "lastname"]);
+  const email = pickField(data, ["email", "e-mail", "adresse email"]);
+  const phone = pickField(data, ["téléphone", "telephone", "numéro de téléphone", "phone", "phone number"]);
+  const postalCode = pickField(data, ["code postal", "postal code", "zip", "zip code"]);
+  const city = pickField(data, ["ville", "city"]);
+
+  const usedKeys = new Set(["prénom", "prenom", "first name", "firstname", "nom", "last name", "lastname",
+    "email", "e-mail", "adresse email", "téléphone", "telephone", "numéro de téléphone", "phone", "phone number",
+    "code postal", "postal code", "zip", "zip code", "ville", "city"]);
+  const notesLines = Object.entries(data)
+    .filter(([k]) => !usedKeys.has(k.trim().toLowerCase()))
+    .map(([k, v]) => `${k}: ${v}`);
+
+  return { firstName, lastName, email, phone, postalCode, city, notesText: notesLines.length ? notesLines.join("\n") : null };
+}
+
+router.post("/webflow", async (req, res) => {
+  if (!verifyWebflowSignature(req)) {
+    console.warn("[Webflow webhook] signature invalide — requête ignorée");
+    return res.sendStatus(200);
+  }
+
+  try {
+    if (req.body.triggerType === "form_submission") {
+      const data = req.body.payload?.data || {};
+      const mapped = mapWebflowFields(data);
+
+      if (!mapped.email) {
+        console.warn("[Webflow webhook] soumission sans email détecté, ignorée:", JSON.stringify(data));
+      } else {
+        // Anti-doublon: même email + source WEBFLOW dans les 5 dernières minutes
+        // (Webflow peut renvoyer le même événement en cas de retry réseau)
+        const recent = await prisma.lead.findFirst({
+          where: {
+            email: mapped.email,
+            source: "WEBFLOW",
+            createdAt: { gte: new Date(Date.now() - 5 * 60 * 1000) },
+          },
+        });
+
+        if (!recent) {
+          const lead = await prisma.lead.create({
+            data: {
+              ...mapped,
+              source: "WEBFLOW",
+              status: "NOUVEAU",
+              statusHistory: { create: { toStatus: "NOUVEAU", changedBy: "webflow_webhook" } },
+            },
+          });
+
+          try {
+            await sendLeadConfirmation(lead);
+            await sendInternalNewLeadNotif(lead);
+          } catch (err) {
+            console.error("[Brevo] échec envoi email (lead Webflow):", err.message);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error("[Webflow webhook] erreur de traitement:", err.message);
+  }
+
+  res.sendStatus(200);
+});
+
 module.exports = router;
