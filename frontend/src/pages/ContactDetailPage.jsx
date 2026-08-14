@@ -23,6 +23,8 @@ export default function ContactDetailPage() {
   const [callText, setCallText] = useState("");
   const [quoteForm, setQuoteForm] = useState({ product: "V2C_TRYDAN", amount: "" });
   const [users, setUsers] = useState(null); // null = pas encore chargé / pas admin
+  const [editingAddress, setEditingAddress] = useState(false);
+  const [addressForm, setAddressForm] = useState({ address: "", postalCode: "", city: "" });
 
   async function load() {
     const data = await api.getLead(id);
@@ -38,6 +40,26 @@ export default function ContactDetailPage() {
 
   async function changeAssignment(userId) {
     await api.updateLead(id, { assignedToId: userId || null });
+    load();
+  }
+
+  function startEditAddress() {
+    setAddressForm({
+      address: lead.address || "",
+      postalCode: lead.postalCode || "",
+      city: lead.city || "",
+    });
+    setEditingAddress(true);
+  }
+
+  async function submitAddress(e) {
+    e.preventDefault();
+    await api.updateLead(id, {
+      address: addressForm.address.trim() || null,
+      postalCode: addressForm.postalCode.trim() || null,
+      city: addressForm.city.trim() || null,
+    });
+    setEditingAddress(false);
     load();
   }
 
@@ -107,8 +129,47 @@ export default function ContactDetailPage() {
               "—"
             )}
           </p>
-          <p>Adresse: {lead.address || "—"}</p>
-          <p>Code postal / Ville: {lead.postalCode || "—"} {lead.city || ""}</p>
+          {!editingAddress && (
+            <>
+              <p>Adresse: {lead.address || "—"}</p>
+              <p>Code postal / Ville: {lead.postalCode || "—"} {lead.city || ""}</p>
+              <button type="button" className="btn-link" onClick={startEditAddress}>
+                {lead.address ? "Modifier l'adresse" : "Ajouter l'adresse"}
+              </button>
+            </>
+          )}
+          {editingAddress && (
+            <form onSubmit={submitAddress} className="inline-form-stack">
+              <label>
+                Adresse (n°, rue)
+                <input
+                  placeholder="Ex: 12 rue des Lilas"
+                  value={addressForm.address}
+                  onChange={(e) => setAddressForm((f) => ({ ...f, address: e.target.value }))}
+                />
+              </label>
+              <label>
+                Code postal
+                <input
+                  placeholder="Code postal"
+                  value={addressForm.postalCode}
+                  onChange={(e) => setAddressForm((f) => ({ ...f, postalCode: e.target.value }))}
+                />
+              </label>
+              <label>
+                Ville
+                <input
+                  placeholder="Ville"
+                  value={addressForm.city}
+                  onChange={(e) => setAddressForm((f) => ({ ...f, city: e.target.value }))}
+                />
+              </label>
+              <div className="inline-form-actions">
+                <button type="submit" className="btn-primary">Enregistrer</button>
+                <button type="button" className="btn-ghost" onClick={() => setEditingAddress(false)}>Annuler</button>
+              </div>
+            </form>
+          )}
           {lead.notesText && <p>Notes initiales: {lead.notesText}</p>}
           {users && lead.status !== "SIGNE" && (
             <p>
