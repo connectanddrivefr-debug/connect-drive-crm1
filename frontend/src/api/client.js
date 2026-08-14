@@ -4,6 +4,14 @@ function getToken() {
   return localStorage.getItem("cdcrm_token");
 }
 
+function getCurrentUser() {
+  try {
+    return JSON.parse(localStorage.getItem("cdcrm_user") || "null");
+  } catch {
+    return null;
+  }
+}
+
 async function request(path, options = {}) {
   const token = getToken();
   const res = await fetch(`${BASE_URL}${path}`, {
@@ -55,4 +63,4 @@ export const api = {
   },
 };
 
-export { getToken };
+export { getToken, getCurrentUser };

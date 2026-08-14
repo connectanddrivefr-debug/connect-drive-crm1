@@ -12,8 +12,9 @@ export default function LoginPage() {
     e.preventDefault();
     setError("");
     try {
-      const { token } = await api.login(email, password);
+      const { token, user } = await api.login(email, password);
       localStorage.setItem("cdcrm_token", token);
+      localStorage.setItem("cdcrm_user", JSON.stringify(user));
       navigate("/");
     } catch (err) {
       setError(err.message);
