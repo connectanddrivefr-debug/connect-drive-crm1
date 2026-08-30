@@ -170,6 +170,9 @@ export default function ContactDetailPage() {
               </div>
             </form>
           )}
+          {lead.estimatedPrice != null && (
+            <p>Prix estimé (simulateur): <strong>{Number(lead.estimatedPrice).toLocaleString("fr-FR")} € TTC</strong></p>
+          )}
           {lead.notesText && <p>Notes initiales: {lead.notesText}</p>}
           {users && lead.status !== "SIGNE" && (
             <p>

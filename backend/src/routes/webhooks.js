@@ -278,6 +278,18 @@ router.post("/webflow", async (req, res) => {
 // Action / route handler Next.js) à la soumission du formulaire final du
 // simulateur. Authentification par secret partagé (header x-webhook-secret),
 // à définir dans SIMULATEUR_WEBHOOK_SECRET et à renseigner côté site.
+// Accepte un nombre (1471.9) ou une chaîne formatée FR ("1 471,90 €") et
+// renvoie un nombre, ou null si non interprétable.
+function parsePrice(value) {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  const cleaned = String(value)
+    .replace(/[€\s ]/g, "")
+    .replace(",", ".");
+  const num = parseFloat(cleaned);
+  return Number.isFinite(num) ? num : null;
+}
+
 router.post("/simulateur", async (req, res) => {
   if (process.env.SIMULATEUR_WEBHOOK_SECRET) {
     const provided = req.headers["x-webhook-secret"];
@@ -292,11 +304,14 @@ router.post("/simulateur", async (req, res) => {
       prenom, nom, email, telephone,
       adresse, codePostal, ville, societe,
       answers, // détail des réponses du simulateur (objet ou tableau), optionnel
+      prixEstimation, // prix TTC affiché au client en fin de simulateur (nombre ou "1 471,90 €")
     } = req.body || {};
 
     if (!email) {
       return res.status(400).json({ error: "Email requis" });
     }
+
+    const estimatedPrice = parsePrice(prixEstimation);
 
     // Anti-doublon: même email + source SIMULATEUR dans les 5 dernières minutes
     const recent = await prisma.lead.findFirst({
@@ -307,6 +322,11 @@ router.post("/simulateur", async (req, res) => {
       },
     });
     if (recent) {
+      // Si le prix n'avait pas encore été reçu (ex: doublon de retry réseau
+      // avant que le calcul ne soit prêt), on le complète.
+      if (estimatedPrice !== null && recent.estimatedPrice === null) {
+        await prisma.lead.update({ where: { id: recent.id }, data: { estimatedPrice } });
+      }
       return res.status(200).json({ ok: true, deduped: true, leadId: recent.id });
     }
 
@@ -334,6 +354,7 @@ router.post("/simulateur", async (req, res) => {
         city: ville || null,
         source: "SIMULATEUR",
         status: "NOUVEAU",
+        estimatedPrice,
         notesText: notesLines.length ? notesLines.join("\n\n") : null,
         statusHistory: { create: { toStatus: "NOUVEAU", changedBy: "simulateur_webhook" } },
       },

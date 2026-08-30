@@ -80,6 +80,10 @@ model Lead {
   source        LeadSource @default(MANUEL)
   status        LeadStatus @default(NOUVEAU)
 
+  // Prix affiché au client à la fin du simulateur de devis (connectndrive.fr),
+  // avant tout devis formel envoyé par un commercial (voir modèle Quote).
+  estimatedPrice Decimal?  @db.Decimal(10, 2)
+
   // Phase 2: attribution automatique par zone (codePostal -> commercial)
   assignedTo    User?      @relation("AssignedCommercial", fields: [assignedToId], references: [id])
   assignedToId  String?
