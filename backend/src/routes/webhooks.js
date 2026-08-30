@@ -312,6 +312,13 @@ router.post("/simulateur", async (req, res) => {
     }
 
     const estimatedPrice = parsePrice(prixEstimation);
+    // DEBUG temporaire: pour diagnostiquer pourquoi le prix n'arrive pas —
+    // affiche les clés reçues et si prixEstimation a bien été interprété.
+    console.log(
+      "[Simulateur webhook DEBUG] clés reçues:", Object.keys(req.body || {}),
+      "| prixEstimation brut:", JSON.stringify(prixEstimation),
+      "| estimatedPrice parsé:", estimatedPrice
+    );
 
     // Anti-doublon: même email + source SIMULATEUR dans les 5 dernières minutes
     const recent = await prisma.lead.findFirst({
@@ -390,6 +397,10 @@ router.post("/simulateur/prix", async (req, res) => {
 
   try {
     const { leadId, prixEstimation } = req.body || {};
+    console.log(
+      "[Simulateur webhook DEBUG /prix] clés reçues:", Object.keys(req.body || {}),
+      "| leadId:", leadId, "| prixEstimation brut:", JSON.stringify(prixEstimation)
+    );
     if (!leadId) return res.status(400).json({ error: "leadId requis" });
 
     const estimatedPrice = parsePrice(prixEstimation);
