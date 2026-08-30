@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import { api } from "../api/client";
 
 const STATUS_LABELS = {
@@ -18,6 +18,7 @@ const PRODUCTS = [
 
 export default function ContactDetailPage() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [lead, setLead] = useState(null);
   const [noteText, setNoteText] = useState("");
   const [callText, setCallText] = useState("");
@@ -41,6 +42,19 @@ export default function ContactDetailPage() {
   async function changeAssignment(userId) {
     await api.updateLead(id, { assignedToId: userId || null });
     load();
+  }
+
+  async function handleDelete() {
+    const nom = `${lead?.firstName || ""} ${lead?.lastName || ""}`.trim() || lead?.email;
+    if (!window.confirm(`Supprimer définitivement le lead "${nom}" ? Cette action est irréversible.`)) {
+      return;
+    }
+    try {
+      await api.deleteLead(id);
+      navigate("/");
+    } catch (err) {
+      alert(`Erreur: ${err.message}`);
+    }
   }
 
   function startEditAddress() {
@@ -101,6 +115,11 @@ export default function ContactDetailPage() {
       <div className="contact-header">
         <h1>{lead.firstName || ""} {lead.lastName || ""}</h1>
         <span className={`badge badge-${lead.source.toLowerCase()}`}>{lead.source}</span>
+        {users && (
+          <button type="button" className="btn-danger" onClick={handleDelete} title="Supprimer ce lead (admin uniquement)">
+            Supprimer le lead
+          </button>
+        )}
       </div>
 
       <div className="status-selector">

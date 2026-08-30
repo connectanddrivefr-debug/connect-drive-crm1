@@ -161,6 +161,15 @@ router.patch("/:id", async (req, res) => {
   res.json(lead);
 });
 
+// DELETE /api/leads/:id  (suppression définitive — réservée à l'admin)
+router.delete("/:id", requireRole("ADMIN"), async (req, res) => {
+  const lead = await prisma.lead.findUnique({ where: { id: req.params.id } });
+  if (!lead) return res.status(404).json({ error: "Lead introuvable" });
+
+  await prisma.lead.delete({ where: { id: req.params.id } });
+  res.status(204).send();
+});
+
 // PATCH /api/leads/:id/status  (déplacement dans le pipeline kanban)
 router.patch("/:id/status", async (req, res) => {
   const { status } = req.body;
