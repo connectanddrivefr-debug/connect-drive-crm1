@@ -45,6 +45,22 @@ export default function KanbanPage() {
     return leads.filter((l) => l.assignedToId === assigneeFilter);
   }, [leads, assigneeFilter, currentUser]);
 
+  async function handleDelete(e, lead) {
+    e.preventDefault(); // ne pas suivre le lien vers la fiche détail
+    e.stopPropagation();
+    const nom = `${lead.firstName || ""} ${lead.lastName || ""}`.trim() || lead.email;
+    if (!window.confirm(`Supprimer définitivement le lead "${nom}" ? Cette action est irréversible.`)) {
+      return;
+    }
+    setLeads((prev) => prev.filter((l) => l.id !== lead.id)); // optimiste
+    try {
+      await api.deleteLead(lead.id);
+    } catch (err) {
+      alert(`Erreur: ${err.message}`);
+      load();
+    }
+  }
+
   async function handleDrop(status) {
     setDragOverCol(null);
     const leadId = window.__draggedLeadId;
@@ -132,6 +148,16 @@ export default function KanbanPage() {
                         window.__draggedLeadId = lead.id;
                       }}
                     >
+                      {users && (
+                        <button
+                          type="button"
+                          className="lead-card-delete"
+                          title="Supprimer ce lead (admin uniquement)"
+                          onClick={(e) => handleDelete(e, lead)}
+                        >
+                          ×
+                        </button>
+                      )}
                       <div className="lead-card-name">
                         {lead.firstName || ""} {lead.lastName || ""}
                         {!lead.firstName && !lead.lastName && lead.email}
