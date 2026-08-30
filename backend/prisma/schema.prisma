@@ -59,6 +59,7 @@ enum LeadSource {
   WEBFLOW
   META
   MANUEL
+  SIMULATEUR // simulateur de devis du site connectndrive.fr (Netlify)
   AUTRE
 }
 

@@ -87,6 +87,7 @@ main { padding: 24px; max-width: 1400px; margin: 0 auto; }
 .badge-webflow { background: #dbeafe; color: #1d4ed8; }
 .badge-meta { background: #ede9fe; color: #6d28d9; }
 .badge-manuel { background: #dcfce7; color: #15803d; }
+.badge-simulateur { background: #fef3c7; color: #b45309; }
 
 /* Modal */
 .modal-overlay {

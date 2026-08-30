@@ -271,4 +271,86 @@ router.post("/webflow", async (req, res) => {
   res.sendStatus(200);
 });
 
+// ---------------------------------------------------------------------------
+// Simulateur de devis — connectndrive.fr (2e site, Next.js hébergé sur Netlify)
+// ---------------------------------------------------------------------------
+// Le site appelle directement cette URL depuis son code serveur (Server
+// Action / route handler Next.js) à la soumission du formulaire final du
+// simulateur. Authentification par secret partagé (header x-webhook-secret),
+// à définir dans SIMULATEUR_WEBHOOK_SECRET et à renseigner côté site.
+router.post("/simulateur", async (req, res) => {
+  if (process.env.SIMULATEUR_WEBHOOK_SECRET) {
+    const provided = req.headers["x-webhook-secret"];
+    if (provided !== process.env.SIMULATEUR_WEBHOOK_SECRET) {
+      console.warn("[Simulateur webhook] secret invalide — requête refusée");
+      return res.status(401).json({ error: "Secret invalide" });
+    }
+  }
+
+  try {
+    const {
+      prenom, nom, email, telephone,
+      adresse, codePostal, ville, societe,
+      answers, // détail des réponses du simulateur (objet ou tableau), optionnel
+    } = req.body || {};
+
+    if (!email) {
+      return res.status(400).json({ error: "Email requis" });
+    }
+
+    // Anti-doublon: même email + source SIMULATEUR dans les 5 dernières minutes
+    const recent = await prisma.lead.findFirst({
+      where: {
+        email,
+        source: "SIMULATEUR",
+        createdAt: { gte: new Date(Date.now() - 5 * 60 * 1000) },
+      },
+    });
+    if (recent) {
+      return res.status(200).json({ ok: true, deduped: true, leadId: recent.id });
+    }
+
+    const notesLines = [];
+    if (societe) notesLines.push(`Société: ${societe}`);
+    if (answers) {
+      try {
+        notesLines.push(
+          "Réponses simulateur:\n" +
+            (typeof answers === "string" ? answers : JSON.stringify(answers, null, 2))
+        );
+      } catch {
+        // ignore si non sérialisable
+      }
+    }
+
+    const lead = await prisma.lead.create({
+      data: {
+        firstName: prenom || null,
+        lastName: nom || null,
+        email,
+        phone: telephone || null,
+        address: adresse || null,
+        postalCode: codePostal || null,
+        city: ville || null,
+        source: "SIMULATEUR",
+        status: "NOUVEAU",
+        notesText: notesLines.length ? notesLines.join("\n\n") : null,
+        statusHistory: { create: { toStatus: "NOUVEAU", changedBy: "simulateur_webhook" } },
+      },
+    });
+
+    try {
+      await sendLeadConfirmation(lead);
+      await sendInternalNewLeadNotif(lead);
+    } catch (err) {
+      console.error("[Brevo] échec envoi email (lead Simulateur):", err.message);
+    }
+
+    res.status(201).json({ ok: true, leadId: lead.id });
+  } catch (err) {
+    console.error("[Simulateur webhook] erreur de traitement:", err.message);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
 module.exports = router;
