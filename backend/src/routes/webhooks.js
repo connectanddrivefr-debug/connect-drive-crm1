@@ -304,21 +304,17 @@ router.post("/simulateur", async (req, res) => {
       prenom, nom, email, telephone,
       adresse, codePostal, ville, societe,
       answers, // détail des réponses du simulateur (objet ou tableau), optionnel
-      prixEstimation, // prix TTC affiché au client en fin de simulateur (nombre ou "1 471,90 €")
+      // prix TTC affiché au client en fin de simulateur (nombre ou "1 471,90 €").
+      // Le site envoie ce champ sous le nom "prix" — on accepte aussi
+      // "prixEstimation" par tolérance si ça change plus tard.
+      prix, prixEstimation,
     } = req.body || {};
 
     if (!email) {
       return res.status(400).json({ error: "Email requis" });
     }
 
-    const estimatedPrice = parsePrice(prixEstimation);
-    // DEBUG temporaire: pour diagnostiquer pourquoi le prix n'arrive pas —
-    // affiche les clés reçues et si prixEstimation a bien été interprété.
-    console.log(
-      "[Simulateur webhook DEBUG] clés reçues:", Object.keys(req.body || {}),
-      "| prixEstimation brut:", JSON.stringify(prixEstimation),
-      "| estimatedPrice parsé:", estimatedPrice
-    );
+    const estimatedPrice = parsePrice(prix !== undefined ? prix : prixEstimation);
 
     // Anti-doublon: même email + source SIMULATEUR dans les 5 dernières minutes
     const recent = await prisma.lead.findFirst({
@@ -396,15 +392,11 @@ router.post("/simulateur/prix", async (req, res) => {
   }
 
   try {
-    const { leadId, prixEstimation } = req.body || {};
-    console.log(
-      "[Simulateur webhook DEBUG /prix] clés reçues:", Object.keys(req.body || {}),
-      "| leadId:", leadId, "| prixEstimation brut:", JSON.stringify(prixEstimation)
-    );
+    const { leadId, prix, prixEstimation } = req.body || {};
     if (!leadId) return res.status(400).json({ error: "leadId requis" });
 
-    const estimatedPrice = parsePrice(prixEstimation);
-    if (estimatedPrice === null) return res.status(400).json({ error: "prixEstimation invalide" });
+    const estimatedPrice = parsePrice(prix !== undefined ? prix : prixEstimation);
+    if (estimatedPrice === null) return res.status(400).json({ error: "prix invalide" });
 
     const lead = await prisma.lead.findUnique({ where: { id: leadId } });
     if (!lead || lead.source !== "SIMULATEUR") {
