@@ -133,6 +133,23 @@ main { padding: 24px; max-width: 1400px; margin: 0 auto; }
 }
 .price-callout-label { font-size: 13px; font-weight: 600; color: #047857; text-transform: uppercase; letter-spacing: 0.04em; }
 .price-callout-value { font-size: 22px; font-weight: 700; color: #047857; }
+
+.info-list { display: flex; flex-direction: column; gap: 14px; margin-top: 6px; }
+.info-field { display: flex; flex-direction: column; gap: 3px; }
+.info-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+.info-value { font-size: 14px; color: var(--text); }
+.info-field select {
+  align-self: flex-start; padding: 7px 9px; border: 1px solid var(--border); border-radius: 6px; margin-top: 2px;
+}
+.info-list > .btn-link { margin-top: -8px; align-self: flex-start; }
+
+.notes-box { margin-top: 2px; }
+.notes-answers { display: flex; flex-wrap: wrap; gap: 6px; }
+.notes-chip {
+  background: #f1f5f9; border-radius: 6px; padding: 4px 9px; font-size: 12px; color: var(--text);
+}
+.notes-chip strong { font-weight: 600; color: var(--muted); margin-right: 3px; }
+.notes-line { margin: 0 0 4px; font-size: 13px; white-space: pre-wrap; color: var(--text); }
 .status-selector { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
 .status-pill {
   border: 1px solid var(--border); background: #fff; border-radius: 20px;

@@ -16,6 +16,54 @@ const PRODUCTS = [
   { value: "AUTRE", label: "Autre" },
 ];
 
+// Libellés lisibles pour les clés du simulateur de devis (connectndrive.fr)
+const ANSWER_KEY_LABELS = {
+  lieu: "Lieu",
+  voiture: "Véhicule électrique",
+  phase: "Alimentation",
+  borne: "Borne choisie",
+  cable: "Câble",
+  distance: "Distance câble",
+  quand: "Délai souhaité",
+};
+
+// "des-que-possible" → "Des que possible"
+function humanize(value) {
+  const text = String(value).replace(/[-_]/g, " ");
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+// Affiche joliment les notes initiales d'un lead. Reconnaît le format
+// "Réponses simulateur:\n{...json...}" (envoyé par connectndrive.fr) et le
+// transforme en petites étiquettes lisibles ; sinon affiche le texte brut.
+function renderNotes(notesText) {
+  const blocks = notesText.split("\n\n");
+  return (
+    <div className="notes-box">
+      {blocks.map((block, i) => {
+        const match = block.match(/^Réponses simulateur:\n([\s\S]+)$/);
+        if (match) {
+          try {
+            const data = JSON.parse(match[1]);
+            return (
+              <div key={i} className="notes-answers">
+                {Object.entries(data).map(([k, v]) => (
+                  <span key={k} className="notes-chip">
+                    <strong>{ANSWER_KEY_LABELS[k] || humanize(k)}:</strong> {humanize(v)}
+                  </span>
+                ))}
+              </div>
+            );
+          } catch {
+            // JSON non valide: on retombe sur l'affichage brut ci-dessous
+          }
+        }
+        return <p key={i} className="notes-line">{block}</p>;
+      })}
+    </div>
+  );
+}
+
 export default function ContactDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -144,77 +192,107 @@ export default function ContactDetailPage() {
       <div className="contact-grid">
         <section className="card">
           <h3>Coordonnées</h3>
-          <p>Email: {lead.email}</p>
-          <p>
-            Téléphone:{" "}
-            {lead.phone ? (
-              <a href={`tel:${lead.phone}`} className="phone-link" title="Cliquer pour appeler — sélectionner le texte pour copier">
-                {lead.phone}
-              </a>
-            ) : (
-              "—"
+          <div className="info-list">
+            <div className="info-field">
+              <span className="info-label">Email</span>
+              <span className="info-value">{lead.email}</span>
+            </div>
+
+            <div className="info-field">
+              <span className="info-label">Téléphone</span>
+              <span className="info-value">
+                {lead.phone ? (
+                  <a href={`tel:${lead.phone}`} className="phone-link" title="Cliquer pour appeler — sélectionner le texte pour copier">
+                    {lead.phone}
+                  </a>
+                ) : (
+                  "—"
+                )}
+              </span>
+            </div>
+
+            {!editingAddress && (
+              <>
+                <div className="info-field">
+                  <span className="info-label">Adresse</span>
+                  <span className="info-value">{lead.address || "—"}</span>
+                </div>
+                <div className="info-field">
+                  <span className="info-label">Code postal / Ville</span>
+                  <span className="info-value">{lead.postalCode || "—"} {lead.city || ""}</span>
+                </div>
+                <button type="button" className="btn-link" onClick={startEditAddress}>
+                  {lead.address ? "Modifier l'adresse" : "Ajouter l'adresse"}
+                </button>
+              </>
             )}
-          </p>
-          {!editingAddress && (
-            <>
-              <p>Adresse: {lead.address || "—"}</p>
-              <p>Code postal / Ville: {lead.postalCode || "—"} {lead.city || ""}</p>
-              <button type="button" className="btn-link" onClick={startEditAddress}>
-                {lead.address ? "Modifier l'adresse" : "Ajouter l'adresse"}
-              </button>
-            </>
-          )}
-          {editingAddress && (
-            <form onSubmit={submitAddress} className="inline-form-stack">
-              <label>
-                Adresse (n°, rue)
-                <input
-                  placeholder="Ex: 12 rue des Lilas"
-                  value={addressForm.address}
-                  onChange={(e) => setAddressForm((f) => ({ ...f, address: e.target.value }))}
-                />
-              </label>
-              <label>
-                Code postal
-                <input
-                  placeholder="Code postal"
-                  value={addressForm.postalCode}
-                  onChange={(e) => setAddressForm((f) => ({ ...f, postalCode: e.target.value }))}
-                />
-              </label>
-              <label>
-                Ville
-                <input
-                  placeholder="Ville"
-                  value={addressForm.city}
-                  onChange={(e) => setAddressForm((f) => ({ ...f, city: e.target.value }))}
-                />
-              </label>
-              <div className="inline-form-actions">
-                <button type="submit" className="btn-primary">Enregistrer</button>
-                <button type="button" className="btn-ghost" onClick={() => setEditingAddress(false)}>Annuler</button>
+            {editingAddress && (
+              <form onSubmit={submitAddress} className="inline-form-stack">
+                <label>
+                  Adresse (n°, rue)
+                  <input
+                    placeholder="Ex: 12 rue des Lilas"
+                    value={addressForm.address}
+                    onChange={(e) => setAddressForm((f) => ({ ...f, address: e.target.value }))}
+                  />
+                </label>
+                <label>
+                  Code postal
+                  <input
+                    placeholder="Code postal"
+                    value={addressForm.postalCode}
+                    onChange={(e) => setAddressForm((f) => ({ ...f, postalCode: e.target.value }))}
+                  />
+                </label>
+                <label>
+                  Ville
+                  <input
+                    placeholder="Ville"
+                    value={addressForm.city}
+                    onChange={(e) => setAddressForm((f) => ({ ...f, city: e.target.value }))}
+                  />
+                </label>
+                <div className="inline-form-actions">
+                  <button type="submit" className="btn-primary">Enregistrer</button>
+                  <button type="button" className="btn-ghost" onClick={() => setEditingAddress(false)}>Annuler</button>
+                </div>
+              </form>
+            )}
+
+            {lead.notesText && (
+              <div className="info-field">
+                <span className="info-label">Notes initiales</span>
+                {renderNotes(lead.notesText)}
               </div>
-            </form>
-          )}
-          {lead.notesText && <p>Notes initiales: {lead.notesText}</p>}
-          {users && lead.status !== "SIGNE" && (
-            <p>
-              Commercial assigné:{" "}
-              <select value={lead.assignedToId || ""} onChange={(e) => changeAssignment(e.target.value)}>
-                <option value="">— Non assigné —</option>
-                {users.map((u) => (
-                  <option key={u.id} value={u.id}>{u.firstName} {u.lastName} ({u.role})</option>
-                ))}
-              </select>
-            </p>
-          )}
-          {lead.status === "SIGNE" && (
-            <p>
-              Commercial assigné: {lead.assignedTo ? `${lead.assignedTo.firstName} ${lead.assignedTo.lastName}` : "— Non assigné —"}
-              <span className="muted"> (verrouillé, lead signé)</span>
-            </p>
-          )}
-          {!users && lead.status !== "SIGNE" && lead.assignedTo && <p>Commercial assigné: {lead.assignedTo.firstName} {lead.assignedTo.lastName}</p>}
+            )}
+
+            {users && lead.status !== "SIGNE" && (
+              <div className="info-field">
+                <span className="info-label">Commercial assigné</span>
+                <select value={lead.assignedToId || ""} onChange={(e) => changeAssignment(e.target.value)}>
+                  <option value="">— Non assigné —</option>
+                  {users.map((u) => (
+                    <option key={u.id} value={u.id}>{u.firstName} {u.lastName} ({u.role})</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {lead.status === "SIGNE" && (
+              <div className="info-field">
+                <span className="info-label">Commercial assigné</span>
+                <span className="info-value">
+                  {lead.assignedTo ? `${lead.assignedTo.firstName} ${lead.assignedTo.lastName}` : "— Non assigné —"}
+                  <span className="muted"> (verrouillé, lead signé)</span>
+                </span>
+              </div>
+            )}
+            {!users && lead.status !== "SIGNE" && lead.assignedTo && (
+              <div className="info-field">
+                <span className="info-label">Commercial assigné</span>
+                <span className="info-value">{lead.assignedTo.firstName} {lead.assignedTo.lastName}</span>
+              </div>
+            )}
+          </div>
         </section>
 
         <section className="card">
