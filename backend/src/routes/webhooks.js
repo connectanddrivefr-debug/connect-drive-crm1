@@ -374,4 +374,38 @@ router.post("/simulateur", async (req, res) => {
   }
 });
 
+// Mise à jour du prix quand le client active le bonus -100€ après coup
+// (le bonus est un vrai choix, pas systématique — l'appel initial /simulateur
+// a déjà créé le lead avec le prix de base). À appeler côté serveur de
+// connectndrive.fr (jamais depuis le navigateur, pour ne pas exposer le
+// secret), avec le leadId renvoyé par l'appel initial.
+router.post("/simulateur/prix", async (req, res) => {
+  if (process.env.SIMULATEUR_WEBHOOK_SECRET) {
+    const provided = req.headers["x-webhook-secret"];
+    if (provided !== process.env.SIMULATEUR_WEBHOOK_SECRET) {
+      console.warn("[Simulateur webhook] secret invalide — requête refusée (maj prix)");
+      return res.status(401).json({ error: "Secret invalide" });
+    }
+  }
+
+  try {
+    const { leadId, prixEstimation } = req.body || {};
+    if (!leadId) return res.status(400).json({ error: "leadId requis" });
+
+    const estimatedPrice = parsePrice(prixEstimation);
+    if (estimatedPrice === null) return res.status(400).json({ error: "prixEstimation invalide" });
+
+    const lead = await prisma.lead.findUnique({ where: { id: leadId } });
+    if (!lead || lead.source !== "SIMULATEUR") {
+      return res.status(404).json({ error: "Lead introuvable" });
+    }
+
+    await prisma.lead.update({ where: { id: leadId }, data: { estimatedPrice } });
+    res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error("[Simulateur webhook] erreur maj prix:", err.message);
+    res.status(500).json({ error: "Erreur serveur" });
+  }
+});
+
 module.exports = router;
