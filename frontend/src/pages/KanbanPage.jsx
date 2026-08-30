@@ -165,6 +165,9 @@ export default function KanbanPage() {
                       <div className="lead-card-meta">{lead.email}</div>
                       <div className="lead-card-meta">{lead.postalCode || ""} {lead.city || ""}</div>
                       <span className={`badge badge-${lead.source.toLowerCase()}`}>{lead.source}</span>
+                      {lead.estimatedPrice != null && (
+                        <span className="lead-card-price">{Number(lead.estimatedPrice).toLocaleString("fr-FR")} €</span>
+                      )}
                     </Link>
                   ))}
               </div>

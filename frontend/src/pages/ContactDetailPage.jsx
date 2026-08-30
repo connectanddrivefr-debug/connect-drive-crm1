@@ -122,6 +122,13 @@ export default function ContactDetailPage() {
         )}
       </div>
 
+      {lead.estimatedPrice != null && (
+        <div className="price-callout">
+          <span className="price-callout-label">Prix estimé (simulateur)</span>
+          <span className="price-callout-value">{Number(lead.estimatedPrice).toLocaleString("fr-FR")} € TTC</span>
+        </div>
+      )}
+
       <div className="status-selector">
         {Object.entries(STATUS_LABELS).map(([key, label]) => (
           <button
@@ -188,9 +195,6 @@ export default function ContactDetailPage() {
                 <button type="button" className="btn-ghost" onClick={() => setEditingAddress(false)}>Annuler</button>
               </div>
             </form>
-          )}
-          {lead.estimatedPrice != null && (
-            <p>Prix estimé (simulateur): <strong>{Number(lead.estimatedPrice).toLocaleString("fr-FR")} € TTC</strong></p>
           )}
           {lead.notesText && <p>Notes initiales: {lead.notesText}</p>}
           {users && lead.status !== "SIGNE" && (
