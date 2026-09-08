@@ -60,10 +60,11 @@ router.get("/stats", async (req, res) => {
     }
   }
 
-  const perdus = byStatus.find((s) => s.status === "PERDU")?._count || 0;
+  // Taux de conversion global: leads signés / TOTAL des leads (et non
+  // seulement parmi les leads "clos" signé+perdu) — c'est la mesure qui
+  // reflète directement combien de leads deviennent réellement des clients.
   const signes = byStatus.find((s) => s.status === "SIGNE")?._count || 0;
-  const issues = perdus + signes;
-  const conversionRate = issues > 0 ? (signes / issues) * 100 : null;
+  const conversionRate = total > 0 ? (signes / total) * 100 : null;
 
   // Leads "non traités depuis 48h": encore au statut Nouveau ou Contacté,
   // créés il y a plus de 48h. Visible par l'admin (vue globale, tous
@@ -95,14 +96,15 @@ router.get("/stats", async (req, res) => {
     const signedLeads = leadsInBucket.filter((l) => l.status === "SIGNE").length;
     const lostLeads = leadsInBucket.filter((l) => l.status === "PERDU").length;
     const inProgressLeads = totalLeads - signedLeads - lostLeads;
-    const closedLeads = signedLeads + lostLeads;
     const revenue = leadsInBucket.reduce((sum, l) => sum + leadRevenue(l), 0);
     return {
       totalLeads,
       signedLeads,
       lostLeads,
       inProgressLeads,
-      conversionRate: closedLeads > 0 ? (signedLeads / closedLeads) * 100 : null,
+      // Signés / TOTAL des leads du bucket (pas seulement parmi les clos) —
+      // même définition que le taux de conversion global ci-dessus.
+      conversionRate: totalLeads > 0 ? (signedLeads / totalLeads) * 100 : null,
       revenue,
       avgDealSize: signedLeads > 0 ? revenue / signedLeads : null,
     };
@@ -133,7 +135,7 @@ router.get("/stats", async (req, res) => {
     total,
     byStatus,
     bySource,
-    conversionRate, // % de leads "clos" (signé ou perdu) qui ont été signés
+    conversionRate, // % de TOUS les leads (pas seulement les clos) qui ont été signés
     avgDaysToSign,
     staleLeads,
     performance,

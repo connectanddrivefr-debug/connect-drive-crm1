@@ -75,11 +75,13 @@ export default function DashboardPage() {
 
   if (!stats) return <p>Chargement…</p>;
 
-  // Seuils demandés: >=35% vert, 20-35% orange, <20% rouge
+  // Taux de conversion = leads signés / total des leads (pas seulement
+  // parmi les leads clos) — seuils à ajuster si besoin selon ce qui est
+  // normal pour l'activité: >=10% vert, 5-10% orange, <5% rouge.
   function rateColor(rate) {
-    if (rate == null) return "#94a3b8"; // gris: pas encore de leads clos
-    if (rate >= 35) return "#16a34a";
-    if (rate >= 20) return "#f59e0b";
+    if (rate == null) return "#94a3b8"; // gris: pas encore de leads
+    if (rate >= 10) return "#16a34a";
+    if (rate >= 5) return "#f59e0b";
     return "#dc2626";
   }
 
@@ -139,7 +141,7 @@ export default function DashboardPage() {
           <div className="stat-value" style={{ color: rateColor(stats.conversionRate) }}>
             {stats.conversionRate != null ? `${stats.conversionRate.toFixed(1)}%` : "—"}
           </div>
-          <div className="stat-label">Taux de conversion (signé / clos)</div>
+          <div className="stat-label">Taux de conversion (signé / total leads)</div>
         </div>
         <div className="stat-card">
           <div className="stat-value">
