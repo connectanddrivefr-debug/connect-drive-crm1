@@ -1,6 +1,52 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  PieChart,
+  Pie,
+  Cell,
+} from "recharts";
 import { api } from "../api/client";
+
+const STATUS_LABELS = {
+  NOUVEAU: "Nouveau",
+  CONTACTE: "Contacté",
+  DEVIS_ENVOYE: "Devis envoyé",
+  SIGNE: "Signé",
+  PERDU: "Perdu",
+};
+const STATUS_COLORS = {
+  NOUVEAU: "#5b8fe0",
+  CONTACTE: "#f59e0b",
+  DEVIS_ENVOYE: "#8b5cf6",
+  SIGNE: "#16a34a",
+  PERDU: "#dc2626",
+};
+const SOURCE_LABELS = {
+  WEBFLOW: "Webflow",
+  META: "Meta Ads",
+  MANUEL: "Manuel",
+  SIMULATEUR: "Simulateur",
+  AUTRE: "Autre",
+};
+const SOURCE_COLORS = {
+  WEBFLOW: "#1d4ed8",
+  META: "#6d28d9",
+  MANUEL: "#15803d",
+  SIMULATEUR: "#b45309",
+  AUTRE: "#64748b",
+};
+
+function formatEuro(value) {
+  return `${Math.round(value || 0).toLocaleString("fr-FR")} €`;
+}
 
 export default function DashboardPage() {
   const [stats, setStats] = useState(null);
@@ -31,11 +77,41 @@ export default function DashboardPage() {
 
   // Seuils demandés: >=35% vert, 20-35% orange, <20% rouge
   function rateColor(rate) {
-    if (rate == null) return "#94a3b8"; // gris: pas encore de devis
+    if (rate == null) return "#94a3b8"; // gris: pas encore de leads clos
     if (rate >= 35) return "#16a34a";
     if (rate >= 20) return "#f59e0b";
     return "#dc2626";
   }
+
+  const performance = stats.performance || [];
+  // Vue "principale" en haut: le Global pour l'admin, ou directement (et
+  // seulement) sa propre ligne pour un commercial (le backend ne renvoie
+  // que celle-ci dans ce cas, donc performance[0] fonctionne aussi).
+  const primary = performance.find((p) => p.key === "global") || performance[0];
+  // Classement des commerciaux (hors Global / Non assigné) pour le graphique
+  const commercialRows = performance.filter((p) => p.key !== "global" && p.key !== "unassigned");
+
+  const perCommercialChart = commercialRows.map((p) => ({
+    name: p.name,
+    "Leads signés": p.signedLeads,
+    "CA signé": p.revenue,
+  }));
+
+  const statusChart = stats.byStatus
+    .map((s) => ({
+      name: STATUS_LABELS[s.status] || s.status,
+      value: s._count,
+      color: STATUS_COLORS[s.status] || "#94a3b8",
+    }))
+    .filter((s) => s.value > 0);
+
+  const sourceChart = stats.bySource
+    .map((s) => ({
+      name: SOURCE_LABELS[s.source] || s.source,
+      value: s._count,
+      color: SOURCE_COLORS[s.source] || "#94a3b8",
+    }))
+    .filter((s) => s.value > 0);
 
   return (
     <div className="dashboard-page">
@@ -46,29 +122,21 @@ export default function DashboardPage() {
         </button>
       </div>
 
-      {stats.revenueByCommercial && stats.revenueByCommercial.length > 0 && (
-        <div className="stats-grid" style={{ marginBottom: 16 }}>
-          {stats.revenueByCommercial.map((r) => (
-            <div key={r.key} className="stat-card" style={{ borderTop: `4px solid ${rateColor(r.rate)}` }}>
-              <div className="stat-value" style={{ color: rateColor(r.rate) }}>
-                {r.rate != null ? `${r.rate.toFixed(0)}%` : "—"}
-              </div>
-              <div className="stat-label">{r.name}</div>
-              <div className="muted" style={{ marginTop: 4 }}>
-                {r.signedAmount.toLocaleString("fr-FR")} € signés / {r.totalAmount.toLocaleString("fr-FR")} € devisés
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
       <div className="stats-grid">
         <div className="stat-card">
           <div className="stat-value">{stats.total}</div>
           <div className="stat-label">Leads au total</div>
         </div>
         <div className="stat-card">
-          <div className="stat-value">
+          <div className="stat-value">{primary ? primary.signedLeads : "—"}</div>
+          <div className="stat-label">Leads signés{primary?.key === "global" ? " (global)" : ""}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-value">{primary ? formatEuro(primary.revenue) : "—"}</div>
+          <div className="stat-label">Chiffre d'affaires signé</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-value" style={{ color: rateColor(stats.conversionRate) }}>
             {stats.conversionRate != null ? `${stats.conversionRate.toFixed(1)}%` : "—"}
           </div>
           <div className="stat-label">Taux de conversion (signé / clos)</div>
@@ -81,24 +149,83 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="dashboard-grid">
-        <div className="card">
-          <h3>Répartition par statut</h3>
-          {stats.byStatus.map((s) => (
-            <div key={s.status} className="bar-row">
-              <span>{s.status}</span>
-              <span>{s._count}</span>
+      {performance.length > 0 && (
+        <div className="stats-grid" style={{ marginTop: 16 }}>
+          {performance.map((r) => (
+            <div key={r.key} className="stat-card" style={{ borderTop: `4px solid ${rateColor(r.conversionRate)}` }}>
+              <div className="stat-value" style={{ color: rateColor(r.conversionRate) }}>
+                {r.conversionRate != null ? `${r.conversionRate.toFixed(0)}%` : "—"}
+              </div>
+              <div className="stat-label">{r.name}</div>
+              <div className="muted" style={{ marginTop: 4 }}>
+                {r.signedLeads} signé{r.signedLeads > 1 ? "s" : ""} / {r.totalLeads} lead{r.totalLeads > 1 ? "s" : ""}
+                {r.lostLeads > 0 ? ` · ${r.lostLeads} perdu${r.lostLeads > 1 ? "s" : ""}` : ""}
+              </div>
+              <div className="muted" style={{ marginTop: 2, fontWeight: 700, color: "#1e293b" }}>
+                {formatEuro(r.revenue)}
+                {r.avgDealSize != null && (
+                  <span className="muted" style={{ fontWeight: 400 }}> ({formatEuro(r.avgDealSize)} / vente)</span>
+                )}
+              </div>
             </div>
           ))}
         </div>
+      )}
+
+      {perCommercialChart.length > 0 && (
+        <div className="card" style={{ marginTop: 16 }}>
+          <h3>Chiffre d'affaires &amp; leads signés par commercial</h3>
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart data={perCommercialChart} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <XAxis dataKey="name" />
+              <YAxis yAxisId="left" orientation="left" tickFormatter={(v) => `${v} €`} width={70} />
+              <YAxis yAxisId="right" orientation="right" allowDecimals={false} width={40} />
+              <Tooltip formatter={(value, name) => (name === "CA signé" ? formatEuro(value) : value)} />
+              <Legend />
+              <Bar yAxisId="right" dataKey="Leads signés" fill="#5b8fe0" radius={[4, 4, 0, 0]} />
+              <Bar yAxisId="left" dataKey="CA signé" fill="#16a34a" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      <div className="dashboard-grid" style={{ marginTop: 16 }}>
+        <div className="card">
+          <h3>Répartition par statut</h3>
+          {statusChart.length > 0 ? (
+            <ResponsiveContainer width="100%" height={240}>
+              <PieChart>
+                <Pie data={statusChart} dataKey="value" nameKey="name" outerRadius={85} label>
+                  {statusChart.map((entry) => (
+                    <Cell key={entry.name} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          ) : (
+            <p className="muted">Aucune donnée.</p>
+          )}
+        </div>
         <div className="card">
           <h3>Répartition par source</h3>
-          {stats.bySource.map((s) => (
-            <div key={s.source} className="bar-row">
-              <span>{s.source}</span>
-              <span>{s._count}</span>
-            </div>
-          ))}
+          {sourceChart.length > 0 ? (
+            <ResponsiveContainer width="100%" height={240}>
+              <PieChart>
+                <Pie data={sourceChart} dataKey="value" nameKey="name" outerRadius={85} label>
+                  {sourceChart.map((entry) => (
+                    <Cell key={entry.name} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          ) : (
+            <p className="muted">Aucune donnée.</p>
+          )}
         </div>
       </div>
 

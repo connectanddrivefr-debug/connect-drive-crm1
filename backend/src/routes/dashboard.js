@@ -5,10 +5,24 @@ const { requireAuth } = require("../middleware/auth");
 const router = express.Router();
 router.use(requireAuth);
 
+// Chiffre d'affaires réel d'un lead: le montant du devis accepté s'il existe,
+// sinon le prix estimé du simulateur (leads qui signent sans devis formel),
+// sinon 0. Reprend exactement la même règle que l'événement Meta "Purchase"
+// (voir routes/leads.js) pour que le CA affiché ici corresponde toujours à
+// ce qui est réellement compté comme vente ailleurs dans l'appli.
+function leadRevenue(lead) {
+  if (lead.status !== "SIGNE") return 0;
+  const accepted = lead.quotes.find((q) => q.status === "ACCEPTE") || lead.quotes[0];
+  if (accepted) return Number(accepted.amount);
+  if (lead.estimatedPrice != null) return Number(lead.estimatedPrice);
+  return 0;
+}
+
 // GET /api/dashboard/stats
-// Taux de conversion, délai moyen de signature, répartition par statut/source
+// Taux de conversion, délai moyen de signature, répartition par statut/source,
+// performance (leads signés/perdus, CA) par commercial + vue globale.
 router.get("/stats", async (req, res) => {
-  const [byStatus, bySource, total, signed] = await Promise.all([
+  const [byStatus, bySource, total, signedForDelay, leads, users] = await Promise.all([
     prisma.lead.groupBy({ by: ["status"], _count: true }),
     prisma.lead.groupBy({ by: ["source"], _count: true }),
     prisma.lead.count(),
@@ -16,12 +30,24 @@ router.get("/stats", async (req, res) => {
       where: { status: "SIGNE" },
       include: { statusHistory: { orderBy: { changedAt: "asc" } } },
     }),
+    // Un seul passage sur tous les leads (avec leurs devis) pour calculer à
+    // la fois le nombre de leads signés/perdus ET le CA réel, par commercial.
+    prisma.lead.findMany({
+      select: {
+        id: true,
+        status: true,
+        assignedToId: true,
+        estimatedPrice: true,
+        quotes: { select: { amount: true, status: true } },
+      },
+    }),
+    prisma.user.findMany({ select: { id: true, firstName: true, lastName: true, role: true } }),
   ]);
 
   // Délai moyen entre création (statut NOUVEAU) et signature (statut SIGNE)
   let avgDaysToSign = null;
-  if (signed.length > 0) {
-    const durations = signed
+  if (signedForDelay.length > 0) {
+    const durations = signedForDelay
       .map((lead) => {
         const created = lead.statusHistory.find((h) => h.toStatus === "NOUVEAU");
         const signedEntry = [...lead.statusHistory].reverse().find((h) => h.toStatus === "SIGNE");
@@ -60,47 +86,47 @@ router.get("/stats", async (req, res) => {
     orderBy: { createdAt: "asc" },
   });
 
-  // Chiffre d'affaires signé / montant total des devis envoyés, par
-  // commercial + vue globale. Seuils d'affichage définis côté frontend
-  // (>=35% vert, 20-35% orange, <20% rouge).
-  const [quotes, users] = await Promise.all([
-    prisma.quote.findMany({
-      select: { amount: true, status: true, lead: { select: { assignedToId: true } } },
-    }),
-    prisma.user.findMany({ select: { id: true, firstName: true, lastName: true, role: true } }),
-  ]);
-
-  function computeBucket(quotesInBucket) {
-    const totalAmount = quotesInBucket.reduce((sum, q) => sum + Number(q.amount), 0);
-    const signedAmount = quotesInBucket
-      .filter((q) => q.status === "ACCEPTE")
-      .reduce((sum, q) => sum + Number(q.amount), 0);
+  // Performance par commercial: calculée directement sur les leads (pas
+  // seulement sur les devis formels) pour que les leads signés via le
+  // simulateur (sans devis créé dans le CRM) soient bien comptés dans le
+  // nombre de signatures ET dans le chiffre d'affaires.
+  function computeBucket(leadsInBucket) {
+    const totalLeads = leadsInBucket.length;
+    const signedLeads = leadsInBucket.filter((l) => l.status === "SIGNE").length;
+    const lostLeads = leadsInBucket.filter((l) => l.status === "PERDU").length;
+    const inProgressLeads = totalLeads - signedLeads - lostLeads;
+    const closedLeads = signedLeads + lostLeads;
+    const revenue = leadsInBucket.reduce((sum, l) => sum + leadRevenue(l), 0);
     return {
-      totalAmount,
-      signedAmount,
-      rate: totalAmount > 0 ? (signedAmount / totalAmount) * 100 : null,
+      totalLeads,
+      signedLeads,
+      lostLeads,
+      inProgressLeads,
+      conversionRate: closedLeads > 0 ? (signedLeads / closedLeads) * 100 : null,
+      revenue,
+      avgDealSize: signedLeads > 0 ? revenue / signedLeads : null,
     };
   }
 
-  let revenueByCommercial = [
-    { key: "global", name: "Global", ...computeBucket(quotes) },
+  let performance = [
+    { key: "global", name: "Global", ...computeBucket(leads) },
     {
       key: "unassigned",
       name: "Non assigné",
-      ...computeBucket(quotes.filter((q) => !q.lead.assignedToId)),
+      ...computeBucket(leads.filter((l) => !l.assignedToId)),
     },
     ...users.map((u) => ({
       key: u.id,
       name: `${u.firstName} ${u.lastName}`,
       role: u.role,
-      ...computeBucket(quotes.filter((q) => q.lead.assignedToId === u.id)),
+      ...computeBucket(leads.filter((l) => l.assignedToId === u.id)),
     })),
   ];
 
   // Un commercial ne voit que son propre résultat, pas celui des collègues
-  // ni le CA global de l'entreprise.
+  // ni la vue globale de l'entreprise.
   if (req.user.role === "COMMERCIAL") {
-    revenueByCommercial = revenueByCommercial.filter((r) => r.key === req.user.id);
+    performance = performance.filter((r) => r.key === req.user.id);
   }
 
   res.json({
@@ -110,7 +136,7 @@ router.get("/stats", async (req, res) => {
     conversionRate, // % de leads "clos" (signé ou perdu) qui ont été signés
     avgDaysToSign,
     staleLeads,
-    revenueByCommercial,
+    performance,
   });
 });
 

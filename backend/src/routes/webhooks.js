@@ -3,6 +3,7 @@ const express = require("express");
 const crypto = require("crypto");
 const prisma = require("../lib/prisma");
 const { sendLeadConfirmation, sendInternalNewLeadNotif } = require("../integrations/brevo");
+const { sendMetaConversionEvent } = require("../integrations/metaConversions");
 
 const router = express.Router();
 
@@ -140,6 +141,12 @@ async function createLeadFromMeta(fields, meta = {}) {
     console.error("[Brevo] échec envoi email (lead Meta):", err.message);
   }
 
+  try {
+    await sendMetaConversionEvent("Lead", lead);
+  } catch (err) {
+    console.error("[MetaCAPI] échec envoi événement (lead Meta):", err.message);
+  }
+
   return lead;
 }
 
@@ -261,6 +268,12 @@ router.post("/webflow", async (req, res) => {
           } catch (err) {
             console.error("[Brevo] échec envoi email (lead Webflow):", err.message);
           }
+
+          try {
+            await sendMetaConversionEvent("Lead", lead);
+          } catch (err) {
+            console.error("[MetaCAPI] échec envoi événement (lead Webflow):", err.message);
+          }
         }
       }
     }
@@ -308,6 +321,17 @@ router.post("/simulateur", async (req, res) => {
       // Le site envoie ce champ sous le nom "prix" — on accepte aussi
       // "prixEstimation" par tolérance si ça change plus tard.
       prix, prixEstimation,
+      // Signaux publicitaires Meta (optionnels, à transmettre depuis le site
+      // pour un rattachement précis du lead à la bonne pub/campagne):
+      // - fbclid: paramètre présent dans l'URL quand le visiteur arrive
+      //   depuis une pub Meta (ex: ?fbclid=XXXX)
+      // - fbc / fbp: cookies posés par le pixel Meta (_fbc / _fbp) si le
+      //   site en a un, sinon peuvent être construits à partir du fbclid
+      // - clientIp / userAgent: IP et user-agent RÉELS du visiteur (pas ceux
+      //   du serveur qui appelle ce webhook) — à transmettre si le site les
+      //   capture côté serveur au moment de la soumission
+      // - pageUrl: URL de la page où le lead a validé sa demande
+      fbclid, fbc, fbp, clientIp, userAgent, pageUrl,
     } = req.body || {};
 
     if (!email) {
@@ -368,6 +392,15 @@ router.post("/simulateur", async (req, res) => {
       await sendInternalNewLeadNotif(lead);
     } catch (err) {
       console.error("[Brevo] échec envoi email (lead Simulateur):", err.message);
+    }
+
+    try {
+      await sendMetaConversionEvent("Lead", lead, {}, {
+        fbclid, fbc, fbp, clientIp, userAgent,
+        sourceUrl: pageUrl || "https://connectndrive.fr/merci",
+      });
+    } catch (err) {
+      console.error("[MetaCAPI] échec envoi événement (lead Simulateur):", err.message);
     }
 
     res.status(201).json({ ok: true, leadId: lead.id });

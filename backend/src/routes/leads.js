@@ -5,6 +5,7 @@ const {
   sendLeadConfirmation,
   sendInternalNewLeadNotif,
 } = require("../integrations/brevo");
+const { sendMetaConversionEvent } = require("../integrations/metaConversions");
 
 const router = express.Router();
 router.use(requireAuth);
@@ -124,6 +125,12 @@ router.post("/", async (req, res) => {
     console.error("[Brevo] échec envoi email création lead:", err.message);
   }
 
+  try {
+    await sendMetaConversionEvent("Lead", lead);
+  } catch (err) {
+    console.error("[MetaCAPI] échec envoi événement création lead:", err.message);
+  }
+
   res.status(201).json(lead);
 });
 
@@ -192,12 +199,25 @@ router.patch("/:id/status", async (req, res) => {
         },
       },
     },
-    include: { assignedTo: true },
+    include: { assignedTo: true, quotes: { orderBy: { sentAt: "desc" } } },
   });
 
   // Automatisation "Bienvenue chez Connect & Drive — prochaines étapes"
   // désactivée sur demande: plus d'email envoyé automatiquement au passage
   // en statut SIGNE.
+
+  // Signal le plus précieux pour Meta: un lead qui devient un vrai client.
+  // On envoie la valeur réelle (devis accepté, sinon prix estimé du
+  // simulateur) pour que l'algorithme optimise vers ce type de profil.
+  if (status === "SIGNE" && current.status !== "SIGNE") {
+    const acceptedQuote = lead.quotes.find((q) => q.status === "ACCEPTE") || lead.quotes[0];
+    const value = acceptedQuote ? Number(acceptedQuote.amount) : (lead.estimatedPrice ? Number(lead.estimatedPrice) : undefined);
+    try {
+      await sendMetaConversionEvent("Purchase", lead, value ? { value, currency: "EUR" } : {});
+    } catch (err) {
+      console.error("[MetaCAPI] échec envoi événement signature:", err.message);
+    }
+  }
 
   res.json(lead);
 });

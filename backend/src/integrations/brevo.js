@@ -17,12 +17,14 @@ const APP_URL = process.env.APP_URL || "https://connect-drive-crm1-three.vercel.
 const PHONE_BY_EMAIL = {
   "connectanddrivefr@gmail.com": "01 89 70 88 73",
   "angelique@connectanddrive.fr": "07 80 97 18 95",
+  "ilham@connectanddrive.fr": "07 56 84 09 85",
 };
 
 // Emails affichés dans la signature (en plus de l'adresse d'envoi elle-même).
 const EXTRA_EMAILS_BY_EMAIL = {
   "connectanddrivefr@gmail.com": ["contact@connectanddrive.fr", "connectanddrivefr@gmail.com"],
   "angelique@connectanddrive.fr": ["angelique@connectanddrive.fr"],
+  "ilham@connectanddrive.fr": ["ilham@connectanddrive.fr"],
 };
 
 function getSignature(assignedUser) {
