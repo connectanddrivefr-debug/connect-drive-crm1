@@ -38,17 +38,10 @@ function normalizedFbc(fbc, fbclid) {
 //     pour rattacher précisément un lead à la bonne pub/campagne)
 //   - fbp: cookie navigateur Meta (_fbp), complémentaire à fbc
 async function sendMetaConversionEvent(eventName, lead, customData = {}, context = {}) {
-  // Deux ensembles de données possibles, envoyés en parallèle s'ils sont
-  // configurés: le pixel web historique (META_PIXEL_ID) et l'ensemble de
-  // données CRM dédié à l'intégration "Prospects qualifiés" du Gestionnaire
-  // de publicités (META_CRM_DATASET_ID) — cf. Ads Manager > Recommandations
-  // > "Associez votre CRM à l'API Conversions de Meta".
-  const targets = [
-    { pixelId: process.env.META_PIXEL_ID, accessToken: process.env.META_CAPI_ACCESS_TOKEN },
-    { pixelId: process.env.META_CRM_DATASET_ID, accessToken: process.env.META_CRM_ACCESS_TOKEN },
-  ].filter((t) => t.pixelId && t.accessToken);
+  const pixelId = process.env.META_PIXEL_ID;
+  const accessToken = process.env.META_CAPI_ACCESS_TOKEN;
 
-  if (targets.length === 0) {
+  if (!pixelId || !accessToken) {
     // Intégration pas encore configurée: on ignore silencieusement, ce n'est
     // jamais bloquant pour la création/mise à jour d'un lead.
     return;
@@ -113,26 +106,22 @@ async function sendMetaConversionEvent(eventName, lead, customData = {}, context
     ],
   };
 
-  await Promise.all(
-    targets.map(async ({ pixelId, accessToken }) => {
-      try {
-        const res = await fetch(
-          `https://graph.facebook.com/v20.0/${pixelId}/events?access_token=${accessToken}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          }
-        );
-        const json = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          console.error(`[MetaCAPI] échec envoi événement "${eventName}" (${pixelId}):`, JSON.stringify(json));
-        }
-      } catch (err) {
-        console.error(`[MetaCAPI] exception envoi événement "${eventName}" (${pixelId}):`, err.message);
+  try {
+    const res = await fetch(
+      `https://graph.facebook.com/v20.0/${pixelId}/events?access_token=${accessToken}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
       }
-    })
-  );
+    );
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      console.error(`[MetaCAPI] échec envoi événement "${eventName}":`, JSON.stringify(json));
+    }
+  } catch (err) {
+    console.error(`[MetaCAPI] exception envoi événement "${eventName}":`, err.message);
+  }
 }
 
 module.exports = { sendMetaConversionEvent };
