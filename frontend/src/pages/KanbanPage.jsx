@@ -164,7 +164,11 @@ export default function KanbanPage() {
                       </div>
                       <div className="lead-card-meta">{lead.email}</div>
                       <div className="lead-card-meta">{lead.postalCode || ""} {lead.city || ""}</div>
-                      <span className={`badge badge-${lead.source.toLowerCase()}`}>{lead.source}</span>
+                      <div className="lead-card-badges">
+                        <span className={`badge badge-${lead.source.toLowerCase()}`}>{lead.source}</span>
+                        {lead.sourceDetail && <span className="badge">{lead.sourceDetail}</span>}
+                        {lead.isProfessional && <span className="badge badge-pro">Pro</span>}
+                      </div>
                       {lead.estimatedPrice != null && (
                         <span className="lead-card-price">{Number(lead.estimatedPrice).toLocaleString("fr-FR")} €</span>
                       )}

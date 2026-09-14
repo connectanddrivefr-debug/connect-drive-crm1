@@ -78,7 +78,15 @@ model Lead {
   city          String?
 
   source        LeadSource @default(MANUEL)
+  // Précision libre de la provenance pour les leads ajoutés manuellement
+  // (ex: "V2C", "Facebook", "Bouche à oreille") — affichée comme étiquette
+  // supplémentaire à côté du badge de source, en plus de la valeur de source.
+  sourceDetail  String?
   status        LeadStatus @default(NOUVEAU)
+
+  // Client professionnel (entreprise) plutôt que particulier — affiché
+  // comme étiquette "Pro" sur la carte et la fiche du lead.
+  isProfessional Boolean   @default(false)
 
   // Prix affiché au client à la fin du simulateur de devis (connectndrive.fr),
   // avant tout devis formel envoyé par un commercial (voir modèle Quote).

@@ -1,10 +1,18 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 
+// Suggestions courantes pour la provenance manuelle — l'utilisateur peut
+// aussi taper une valeur libre non listée ici (ex: un nouveau partenaire).
+const SOURCE_DETAIL_SUGGESTIONS = [
+  "V2C", "Facebook", "Bouche à oreille", "Salon / événement", "Ancien client", "Parrainage",
+];
+
 export default function NewLeadModal({ onClose, onCreated }) {
   const [form, setForm] = useState({
     firstName: "", lastName: "", email: "", phone: "",
-    address: "", postalCode: "", city: "", notesText: "", assignedToId: "",
+    address: "", postalCode: "", city: "",
+    sourceDetail: "", isProfessional: false,
+    notesText: "", assignedToId: "",
   });
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -65,7 +73,29 @@ export default function NewLeadModal({ onClose, onCreated }) {
             <label>Ville</label>
             <input value={form.city} onChange={(e) => update("city", e.target.value)} />
           </div>
+          <div>
+            <label>Provenance (précision)</label>
+            <input
+              list="source-detail-suggestions"
+              placeholder="Ex: V2C, Facebook…"
+              value={form.sourceDetail}
+              onChange={(e) => update("sourceDetail", e.target.value)}
+            />
+            <datalist id="source-detail-suggestions">
+              {SOURCE_DETAIL_SUGGESTIONS.map((s) => <option key={s} value={s} />)}
+            </datalist>
+          </div>
         </div>
+
+        <label className="checkbox-label">
+          <input
+            type="checkbox"
+            checked={form.isProfessional}
+            onChange={(e) => update("isProfessional", e.target.checked)}
+          />
+          Client professionnel (pro)
+        </label>
+
         {users && users.length > 0 && (
           <>
             <label>Commercial assigné (optionnel)</label>

@@ -58,11 +58,11 @@ router.get("/export/csv", requireRole("ADMIN"), async (req, res) => {
 
   const header = [
     "Prénom", "Nom", "Email", "Téléphone", "Adresse", "Code postal", "Ville",
-    "Source", "Statut", "Commercial assigné", "Montant devis", "Notes", "Créé le",
+    "Source", "Provenance (détail)", "Client pro", "Statut", "Commercial assigné", "Montant devis", "Notes", "Créé le",
   ];
   const rows = leads.map((l) => [
     l.firstName, l.lastName, l.email, l.phone, l.address, l.postalCode, l.city,
-    l.source, l.status,
+    l.source, l.sourceDetail || "", l.isProfessional ? "Oui" : "Non", l.status,
     l.assignedTo ? `${l.assignedTo.firstName} ${l.assignedTo.lastName}` : "",
     l.quotes[0] ? Number(l.quotes[0].amount) : "",
     l.notesText, l.createdAt.toISOString(),
@@ -97,7 +97,7 @@ router.post("/", async (req, res) => {
   const {
     firstName, lastName, email, phone,
     address, postalCode, city,
-    source = "MANUEL", notesText, assignedToId,
+    source = "MANUEL", sourceDetail, isProfessional, notesText, assignedToId,
   } = req.body;
 
   if (!email) return res.status(400).json({ error: "Email requis" });
@@ -106,7 +106,8 @@ router.post("/", async (req, res) => {
     data: {
       firstName, lastName, email, phone,
       address, postalCode, city,
-      source, notesText, assignedToId,
+      source, sourceDetail: sourceDetail || null, isProfessional: Boolean(isProfessional),
+      notesText, assignedToId,
       status: "NOUVEAU",
       statusHistory: {
         create: { toStatus: "NOUVEAU", changedBy: req.user?.email || "system" },
@@ -136,7 +137,10 @@ router.post("/", async (req, res) => {
 
 // PATCH /api/leads/:id  (édition des infos)
 router.patch("/:id", async (req, res) => {
-  const { firstName, lastName, email, phone, address, postalCode, city, notesText, assignedToId } = req.body;
+  const {
+    firstName, lastName, email, phone, address, postalCode, city,
+    sourceDetail, isProfessional, notesText, assignedToId,
+  } = req.body;
 
   const before = await prisma.lead.findUnique({ where: { id: req.params.id } });
   if (!before) return res.status(404).json({ error: "Lead introuvable" });
@@ -151,7 +155,12 @@ router.patch("/:id", async (req, res) => {
 
   const lead = await prisma.lead.update({
     where: { id: req.params.id },
-    data: { firstName, lastName, email, phone, address, postalCode, city, notesText, assignedToId },
+    data: {
+      firstName, lastName, email, phone, address, postalCode, city,
+      ...(sourceDetail !== undefined ? { sourceDetail: sourceDetail || null } : {}),
+      ...(isProfessional !== undefined ? { isProfessional: Boolean(isProfessional) } : {}),
+      notesText, assignedToId,
+    },
     include: { assignedTo: true },
   });
 

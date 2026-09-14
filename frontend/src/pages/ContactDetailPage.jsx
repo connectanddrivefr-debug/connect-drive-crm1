@@ -10,6 +10,12 @@ const STATUS_LABELS = {
   PERDU: "Perdu",
 };
 
+// Suggestions courantes pour la provenance manuelle — l'utilisateur peut
+// aussi taper une valeur libre non listée ici.
+const SOURCE_DETAIL_SUGGESTIONS = [
+  "V2C", "Facebook", "Bouche à oreille", "Salon / événement", "Ancien client", "Parrainage",
+];
+
 const PRODUCTS = [
   { value: "V2C_TRYDAN", label: "V2C Trydan" },
   { value: "SMAPPEE_EV_WALL", label: "Smappee EV Wall" },
@@ -74,6 +80,8 @@ export default function ContactDetailPage() {
   const [users, setUsers] = useState(null); // null = pas encore chargé / pas admin
   const [editingAddress, setEditingAddress] = useState(false);
   const [addressForm, setAddressForm] = useState({ address: "", postalCode: "", city: "" });
+  const [editingOrigin, setEditingOrigin] = useState(false);
+  const [originForm, setOriginForm] = useState({ sourceDetail: "", isProfessional: false });
 
   async function load() {
     const data = await api.getLead(id);
@@ -125,6 +133,24 @@ export default function ContactDetailPage() {
     load();
   }
 
+  function startEditOrigin() {
+    setOriginForm({
+      sourceDetail: lead.sourceDetail || "",
+      isProfessional: Boolean(lead.isProfessional),
+    });
+    setEditingOrigin(true);
+  }
+
+  async function submitOrigin(e) {
+    e.preventDefault();
+    await api.updateLead(id, {
+      sourceDetail: originForm.sourceDetail.trim() || null,
+      isProfessional: originForm.isProfessional,
+    });
+    setEditingOrigin(false);
+    load();
+  }
+
   if (!lead) return <p>Chargement…</p>;
 
   async function changeStatus(status) {
@@ -163,6 +189,8 @@ export default function ContactDetailPage() {
       <div className="contact-header">
         <h1>{lead.firstName || ""} {lead.lastName || ""}</h1>
         <span className={`badge badge-${lead.source.toLowerCase()}`}>{lead.source}</span>
+        {lead.sourceDetail && <span className="badge">{lead.sourceDetail}</span>}
+        {lead.isProfessional && <span className="badge badge-pro">Pro</span>}
         {users && (
           <button type="button" className="btn-danger" onClick={handleDelete} title="Supprimer ce lead (admin uniquement)">
             Supprimer le lead
@@ -255,6 +283,50 @@ export default function ContactDetailPage() {
                 <div className="inline-form-actions">
                   <button type="submit" className="btn-primary">Enregistrer</button>
                   <button type="button" className="btn-ghost" onClick={() => setEditingAddress(false)}>Annuler</button>
+                </div>
+              </form>
+            )}
+
+            {!editingOrigin && (
+              <>
+                <div className="info-field">
+                  <span className="info-label">Provenance (détail)</span>
+                  <span className="info-value">{lead.sourceDetail || "—"}</span>
+                </div>
+                <div className="info-field">
+                  <span className="info-label">Type de client</span>
+                  <span className="info-value">{lead.isProfessional ? "Professionnel" : "Particulier"}</span>
+                </div>
+                <button type="button" className="btn-link" onClick={startEditOrigin}>
+                  Modifier la provenance / le type de client
+                </button>
+              </>
+            )}
+            {editingOrigin && (
+              <form onSubmit={submitOrigin} className="inline-form-stack">
+                <label>
+                  Provenance (précision)
+                  <input
+                    list="source-detail-suggestions-detail"
+                    placeholder="Ex: V2C, Facebook…"
+                    value={originForm.sourceDetail}
+                    onChange={(e) => setOriginForm((f) => ({ ...f, sourceDetail: e.target.value }))}
+                  />
+                  <datalist id="source-detail-suggestions-detail">
+                    {SOURCE_DETAIL_SUGGESTIONS.map((s) => <option key={s} value={s} />)}
+                  </datalist>
+                </label>
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={originForm.isProfessional}
+                    onChange={(e) => setOriginForm((f) => ({ ...f, isProfessional: e.target.checked }))}
+                  />
+                  Client professionnel (pro)
+                </label>
+                <div className="inline-form-actions">
+                  <button type="submit" className="btn-primary">Enregistrer</button>
+                  <button type="button" className="btn-ghost" onClick={() => setEditingOrigin(false)}>Annuler</button>
                 </div>
               </form>
             )}

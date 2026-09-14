@@ -104,6 +104,10 @@ main { padding: 24px; max-width: 1400px; margin: 0 auto; }
 .badge-meta { background: #ede9fe; color: #6d28d9; }
 .badge-manuel { background: #dcfce7; color: #15803d; }
 .badge-simulateur { background: #fef3c7; color: #b45309; }
+.badge-pro { background: #fee2e2; color: #b91c1c; font-weight: 700; }
+.lead-card-badges { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.checkbox-label { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); margin-top: 10px; }
+.checkbox-label input { width: auto; margin-top: 0; }
 
 /* Modal */
 .modal-overlay {
