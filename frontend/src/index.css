@@ -101,6 +101,11 @@ main { padding: 24px; max-width: 1400px; margin: 0 auto; }
   font-weight: 700; border-bottom: 1px solid var(--border);
 }
 .kanban-column-header .count { color: var(--muted); font-weight: 400; }
+.kanban-column-monthbar { padding: 8px 14px; border-bottom: 1px solid var(--border); }
+.kanban-column-monthbar select {
+  width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: #f8fafc; font-weight: 600; color: var(--brand-dark);
+}
 .kanban-column-body { padding: 10px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
 
 .lead-card {

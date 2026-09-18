@@ -92,6 +92,12 @@ model Lead {
   postalCode    String?
   city          String?
 
+  // Date de signature effective (moment où le statut passe à SIGNE). Sert à
+  // regrouper les leads signés par mois pour le suivi des objectifs commerciaux
+  // (voir section "Signé" du pipeline) — distinct de updatedAt qui peut
+  // changer pour d'autres raisons après la signature.
+  signedAt      DateTime?
+
   source        LeadSource @default(MANUEL)
   // Précision libre de la provenance pour les leads ajoutés manuellement
   // (ex: "V2C", "Facebook", "Bouche à oreille") — affichée comme étiquette

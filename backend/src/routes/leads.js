@@ -75,6 +75,28 @@ router.get("/export/csv", requireRole("ADMIN"), async (req, res) => {
   res.send("﻿" + csv); // BOM pour un affichage correct des accents dans Excel
 });
 
+// GET /api/leads/backfill-signed-at — à usage unique (admin uniquement):
+// renseigne signedAt pour les leads déjà signés avant l'ajout du suivi par
+// mois, à partir de la date du dernier passage en statut SIGNE dans
+// l'historique. Sans effet sur les leads qui ont déjà une valeur.
+router.get("/backfill-signed-at", requireRole("ADMIN"), async (req, res) => {
+  const leads = await prisma.lead.findMany({
+    where: { status: "SIGNE", signedAt: null },
+    include: {
+      statusHistory: { where: { toStatus: "SIGNE" }, orderBy: { changedAt: "desc" }, take: 1 },
+    },
+  });
+
+  let updated = 0;
+  for (const lead of leads) {
+    const signedAt = lead.statusHistory[0]?.changedAt || lead.updatedAt;
+    await prisma.lead.update({ where: { id: lead.id }, data: { signedAt } });
+    updated += 1;
+  }
+
+  res.json({ ok: true, updated });
+});
+
 // GET /api/leads/:id (fiche contact complète)
 router.get("/:id", async (req, res) => {
   const lead = await prisma.lead.findUnique({
@@ -239,6 +261,11 @@ router.patch("/:id/status", async (req, res) => {
     where: { id: req.params.id },
     data: {
       status,
+      // Horodatage du mois de signature (objectifs commerciaux, voir
+      // section "Signé" du pipeline): posé à l'entrée dans SIGNE, effacé
+      // si le lead en ressort (ex: erreur, réouverture du dossier).
+      ...(status === "SIGNE" && current.status !== "SIGNE" ? { signedAt: new Date() } : {}),
+      ...(status !== "SIGNE" && current.status === "SIGNE" ? { signedAt: null } : {}),
       statusHistory: {
         create: {
           fromStatus: current.status,

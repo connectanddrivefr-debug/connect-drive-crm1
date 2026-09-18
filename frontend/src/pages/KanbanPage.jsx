@@ -11,6 +11,14 @@ const COLUMNS = [
   { key: "PERDU", label: "Perdu" },
 ];
 
+// "2026-09" -> "Septembre 2026" — utilisé pour le sélecteur de mois de la
+// colonne "Signé" (suivi des objectifs commerciaux par mois de signature).
+function monthLabel(monthStr) {
+  const [y, m] = monthStr.split("-").map(Number);
+  const label = new Date(y, m - 1, 1).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
 export default function KanbanPage() {
   const [leads, setLeads] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -18,6 +26,8 @@ export default function KanbanPage() {
   const [dragOverCol, setDragOverCol] = useState(null);
   const [users, setUsers] = useState(null); // liste des commerciaux, admin uniquement
   const [assigneeFilter, setAssigneeFilter] = useState("ALL"); // ALL | ME | UNASSIGNED | <userId>
+  const currentMonthStr = useMemo(() => new Date().toISOString().slice(0, 7), []);
+  const [signedMonth, setSignedMonth] = useState(currentMonthStr);
 
   const currentUser = getCurrentUser();
 
@@ -44,6 +54,17 @@ export default function KanbanPage() {
     if (assigneeFilter === "UNASSIGNED") return leads.filter((l) => !l.assignedToId);
     return leads.filter((l) => l.assignedToId === assigneeFilter);
   }, [leads, assigneeFilter, currentUser]);
+
+  // Mois disponibles pour la colonne "Signé": tous les mois où au moins un
+  // lead (visible avec le filtre commercial courant) a été signé, plus le
+  // mois en cours même s'il est encore vide.
+  const signedMonths = useMemo(() => {
+    const set = new Set([currentMonthStr]);
+    visibleLeads.forEach((l) => {
+      if (l.status === "SIGNE" && l.signedAt) set.add(l.signedAt.slice(0, 7));
+    });
+    return Array.from(set).sort().reverse();
+  }, [visibleLeads, currentMonthStr]);
 
   async function handleDelete(e, lead) {
     e.preventDefault(); // ne pas suivre le lien vers la fiche détail
@@ -120,25 +141,38 @@ export default function KanbanPage() {
         <p>Chargement…</p>
       ) : (
         <div className="kanban-board">
-          {COLUMNS.map((col) => (
-            <div
-              key={col.key}
-              className={`kanban-column ${dragOverCol === col.key ? "drag-over" : ""}`}
-              onDragOver={(e) => {
-                e.preventDefault();
-                setDragOverCol(col.key);
-              }}
-              onDragLeave={() => setDragOverCol(null)}
-              onDrop={() => handleDrop(col.key)}
-            >
-              <div className="kanban-column-header">
-                <span>{col.label}</span>
-                <span className="count">{visibleLeads.filter((l) => l.status === col.key).length}</span>
-              </div>
-              <div className="kanban-column-body">
-                {visibleLeads
-                  .filter((l) => l.status === col.key)
-                  .map((lead) => (
+          {COLUMNS.map((col) => {
+            const isSigneCol = col.key === "SIGNE";
+            const columnLeads = isSigneCol
+              ? visibleLeads.filter((l) => l.status === "SIGNE" && l.signedAt && l.signedAt.slice(0, 7) === signedMonth)
+              : visibleLeads.filter((l) => l.status === col.key);
+
+            return (
+              <div
+                key={col.key}
+                className={`kanban-column ${dragOverCol === col.key ? "drag-over" : ""}`}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragOverCol(col.key);
+                }}
+                onDragLeave={() => setDragOverCol(null)}
+                onDrop={() => handleDrop(col.key)}
+              >
+                <div className="kanban-column-header">
+                  <span>{col.label}</span>
+                  <span className="count">{columnLeads.length}</span>
+                </div>
+                {isSigneCol && (
+                  <div className="kanban-column-monthbar">
+                    <select value={signedMonth} onChange={(e) => setSignedMonth(e.target.value)}>
+                      {signedMonths.map((m) => (
+                        <option key={m} value={m}>{monthLabel(m)}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <div className="kanban-column-body">
+                  {columnLeads.map((lead) => (
                     <Link
                       to={`/leads/${lead.id}`}
                       key={lead.id}
@@ -164,6 +198,9 @@ export default function KanbanPage() {
                       </div>
                       <div className="lead-card-meta">{lead.email}</div>
                       <div className="lead-card-meta">{lead.postalCode || ""} {lead.city || ""}</div>
+                      {isSigneCol && lead.signedAt && (
+                        <div className="lead-card-meta">Signé le {new Date(lead.signedAt).toLocaleDateString("fr-FR")}</div>
+                      )}
                       <div className="lead-card-badges">
                         <span className={`badge badge-${lead.source.toLowerCase()}`}>{lead.source}</span>
                         {lead.sourceDetail && <span className="badge">{lead.sourceDetail}</span>}
@@ -178,9 +215,10 @@ export default function KanbanPage() {
                       )}
                     </Link>
                   ))}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
