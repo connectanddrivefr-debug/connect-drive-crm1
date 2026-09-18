@@ -209,6 +209,7 @@ export default function KanbanPage() {
                         {lead.technicalVisitStatus === "A_PROGRAMMER" && <span className="badge badge-rappel">Visite à prog.</span>}
                         {lead.callbackRequested && <span className="badge badge-rappel">À rappeler</span>}
                         {lead.photosStatus === "EN_ATTENTE" && <span className="badge badge-rappel">Photos</span>}
+                        {lead.installationStatus === "PROGRAMMEE" && <span className="badge badge-rappel">Install. prog.</span>}
                       </div>
                       {lead.estimatedPrice != null && (
                         <span className="lead-card-price">{Number(lead.estimatedPrice).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span>

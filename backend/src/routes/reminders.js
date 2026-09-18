@@ -1,7 +1,8 @@
 // Section "Rappels": visites techniques programmées/à programmer, demandes
-// de rappel client, et suivi des photos en attente. Voir schema.prisma
-// (TechnicalVisitStatus, PhotosStatus) et jobs/visitReminders.js + photoReminders.js
-// pour les relances automatiques.
+// de rappel client, suivi des photos en attente, et installations
+// programmées. Voir schema.prisma (TechnicalVisitStatus, PhotosStatus,
+// InstallationStatus) et jobs/visitReminders.js + photoReminders.js +
+// installationReminders.js pour les relances automatiques.
 const express = require("express");
 const prisma = require("../lib/prisma");
 const { requireAuth } = require("../middleware/auth");
@@ -24,6 +25,7 @@ router.get("/", async (req, res) => {
         { technicalVisitStatus: { in: ["A_PROGRAMMER", "PROGRAMMEE"] } },
         { callbackRequested: true },
         { photosStatus: "EN_ATTENTE" },
+        { installationStatus: "PROGRAMMEE" },
       ],
     },
     orderBy: { updatedAt: "desc" },
@@ -35,6 +37,7 @@ router.get("/", async (req, res) => {
     visitesAProgrammer: leads.filter((l) => l.technicalVisitStatus === "A_PROGRAMMER"),
     clientsARappeler: leads.filter((l) => l.callbackRequested),
     photosEnAttente: leads.filter((l) => l.photosStatus === "EN_ATTENTE"),
+    installationsProgrammees: leads.filter((l) => l.installationStatus === "PROGRAMMEE"),
   });
 });
 

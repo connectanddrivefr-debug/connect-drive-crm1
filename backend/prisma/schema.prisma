@@ -78,6 +78,11 @@ enum PhotosStatus {
   RECUES
 }
 
+enum InstallationStatus {
+  NON_PROGRAMMEE
+  PROGRAMMEE // planifiée — voir installationDate
+}
+
 model Lead {
   id            String     @id @default(uuid())
 
@@ -123,6 +128,11 @@ model Lead {
   photosRequestedAt    DateTime?
   // Une seule relance automatique par demande de photos (comme pour les devis).
   photosReminderSentAt DateTime?
+
+  installationStatus InstallationStatus @default(NON_PROGRAMMEE)
+  installationDate   DateTime? // si PROGRAMMEE
+  // Empêche de renvoyer plusieurs fois le rappel J-2 pour la même date d'installation.
+  installationReminderSentAt DateTime?
 
   // Prix affiché au client à la fin du simulateur de devis (connectndrive.fr),
   // avant tout devis formel envoyé par un commercial (voir modèle Quote).
@@ -206,6 +216,7 @@ enum EmailType {
   CONFIRMATION_SIGNATURE
   RAPPEL_VISITE
   RAPPEL_PHOTOS
+  RAPPEL_INSTALLATION
   AUTRE
 }
 

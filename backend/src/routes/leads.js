@@ -164,6 +164,7 @@ router.patch("/:id", async (req, res) => {
     sourceDetail, isProfessional, notesText, assignedToId,
     technicalVisitStatus, technicalVisitDate, technicalVisitSlots,
     callbackRequested, photosStatus,
+    installationStatus, installationDate,
   } = req.body;
 
   const before = await prisma.lead.findUnique({ where: { id: req.params.id } });
@@ -210,6 +211,16 @@ router.patch("/:id", async (req, res) => {
     if (photosStatus === "RECUES" || photosStatus === "NON_DEMANDEES") {
       rappelData.photosRequestedAt = photosStatus === "NON_DEMANDEES" ? null : before.photosRequestedAt;
       rappelData.photosReminderSentAt = null;
+    }
+  }
+  if (installationStatus !== undefined) {
+    rappelData.installationStatus = installationStatus;
+  }
+  if (installationDate !== undefined) {
+    rappelData.installationDate = installationDate ? new Date(installationDate) : null;
+    // Nouvelle date (ou date effacée) -> on autorise à nouveau le rappel J-2.
+    if (installationDate !== before.installationDate?.toISOString()) {
+      rappelData.installationReminderSentAt = null;
     }
   }
 

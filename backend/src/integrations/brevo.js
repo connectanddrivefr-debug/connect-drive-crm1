@@ -255,6 +255,26 @@ async function sendPhotoReminderInternal(lead, assignedUser) {
   });
 }
 
+// Rappel J-2 avant une installation programmée: on demande au commercial de
+// reconfirmer le rendez-vous d'installation avec le technicien et le client.
+async function sendInstallationReminderInternal(lead, assignedUser) {
+  if (!assignedUser?.email) return; // pas de commercial assigné -> pas d'email
+  const dateStr = lead.installationDate
+    ? new Date(lead.installationDate).toLocaleString("fr-FR", { dateStyle: "long", timeStyle: "short" })
+    : "date non précisée";
+  return sendEmail({
+    to: assignedUser.email,
+    subject: `Rappel: installation dans 2 jours — ${lead.firstName || ""} ${lead.lastName || ""}`,
+    htmlContent: `
+      <p>Bonjour ${assignedUser.firstName || ""},</p>
+      <p>Une installation est programmée le <strong>${dateStr}</strong> pour ${lead.firstName || ""} ${lead.lastName || ""} (${lead.phone || lead.email}).</p>
+      <p>Merci de reconfirmer ce rendez-vous avec le technicien et avec le client pour vous assurer qu'il est toujours bon.</p>
+    `,
+    leadId: lead.id,
+    type: "RAPPEL_INSTALLATION",
+  });
+}
+
 module.exports = {
   sendLeadConfirmation,
   sendInternalNewLeadNotif,
@@ -263,4 +283,5 @@ module.exports = {
   sendSignatureConfirmation,
   sendVisitReminderInternal,
   sendPhotoReminderInternal,
+  sendInstallationReminderInternal,
 };

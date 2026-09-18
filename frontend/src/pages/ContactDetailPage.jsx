@@ -28,6 +28,11 @@ const PHOTOS_STATUS_LABELS = {
   RECUES: "Reçues",
 };
 
+const INSTALLATION_STATUS_LABELS = {
+  NON_PROGRAMMEE: "Aucune installation en cours",
+  PROGRAMMEE: "Programmée",
+};
+
 // "2026-09-20T14:30:00.000Z" -> "2026-09-20T14:30" (format attendu par <input type="datetime-local">)
 function toDatetimeLocal(isoString) {
   if (!isoString) return "";
@@ -104,6 +109,7 @@ export default function ContactDetailPage() {
   const [originForm, setOriginForm] = useState({ sourceDetail: "", isProfessional: false });
   const [visitSlots, setVisitSlots] = useState("");
   const [visitDate, setVisitDate] = useState("");
+  const [installationDate, setInstallationDate] = useState("");
 
   async function load() {
     const data = await api.getLead(id);
@@ -121,7 +127,8 @@ export default function ContactDetailPage() {
     if (!lead) return;
     setVisitSlots(lead.technicalVisitSlots || "");
     setVisitDate(toDatetimeLocal(lead.technicalVisitDate));
-  }, [lead?.id, lead?.technicalVisitSlots, lead?.technicalVisitDate]);
+    setInstallationDate(toDatetimeLocal(lead.installationDate));
+  }, [lead?.id, lead?.technicalVisitSlots, lead?.technicalVisitDate, lead?.installationDate]);
 
   async function changeVisitStatus(status) {
     await api.updateLead(id, { technicalVisitStatus: status });
@@ -147,6 +154,17 @@ export default function ContactDetailPage() {
 
   async function changePhotosStatus(status) {
     await api.updateLead(id, { photosStatus: status });
+    load();
+  }
+
+  async function changeInstallationStatus(status) {
+    await api.updateLead(id, { installationStatus: status });
+    load();
+  }
+
+  async function saveInstallationDate(e) {
+    e.preventDefault();
+    await api.updateLead(id, { installationDate: installationDate ? new Date(installationDate).toISOString() : null });
     load();
   }
 
@@ -473,6 +491,26 @@ export default function ContactDetailPage() {
                 ))}
               </select>
             </div>
+
+            <div className="info-field">
+              <span className="info-label">Installation</span>
+              <select value={lead.installationStatus} onChange={(e) => changeInstallationStatus(e.target.value)}>
+                {Object.entries(INSTALLATION_STATUS_LABELS).map(([key, label]) => (
+                  <option key={key} value={key}>{label}</option>
+                ))}
+              </select>
+            </div>
+
+            {lead.installationStatus === "PROGRAMMEE" && (
+              <form onSubmit={saveInstallationDate} className="inline-form">
+                <input
+                  type="datetime-local"
+                  value={installationDate}
+                  onChange={(e) => setInstallationDate(e.target.value)}
+                />
+                <button type="submit" className="btn-primary">Enregistrer</button>
+              </form>
+            )}
           </div>
         </section>
 

@@ -4,6 +4,7 @@ const express = require("express");
 const { runQuoteReminders } = require("../jobs/quoteReminders");
 const { runVisitReminders } = require("../jobs/visitReminders");
 const { runPhotoReminders } = require("../jobs/photoReminders");
+const { runInstallationReminders } = require("../jobs/installationReminders");
 const { pollWebflowLeads } = require("../integrations/webflowGmailPoll");
 
 const router = express.Router();
@@ -40,6 +41,16 @@ router.get("/visit-reminders", checkCronSecret, async (req, res) => {
 router.get("/photo-reminders", checkCronSecret, async (req, res) => {
   try {
     const n = await runPhotoReminders();
+    res.json({ ok: true, remindersSent: n });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get("/installation-reminders", checkCronSecret, async (req, res) => {
+  try {
+    const n = await runInstallationReminders();
     res.json({ ok: true, remindersSent: n });
   } catch (err) {
     console.error(err);

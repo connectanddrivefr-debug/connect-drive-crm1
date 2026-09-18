@@ -44,11 +44,14 @@ export default function RemindersPage() {
 
   if (loading || !data) return <p>Chargement…</p>;
 
-  // Visites programmées dans les 2 prochains jours -> à reconfirmer avec le
-  // technicien et le client (même logique que le rappel automatique J-2).
-  const aConfirmer = data.visitesProgrammees.filter(
-    (l) => l.technicalVisitDate && daysUntil(l.technicalVisitDate) <= 2 && daysUntil(l.technicalVisitDate) >= 0
-  );
+  // Visites et installations programmées dans les 2 prochains jours -> à
+  // reconfirmer avec le technicien et le client (même logique que le rappel
+  // automatique J-2).
+  const dansMoinsDe48h = (dateStr) => dateStr && daysUntil(dateStr) <= 2 && daysUntil(dateStr) >= 0;
+  const aConfirmer = [
+    ...data.visitesProgrammees.filter((l) => dansMoinsDe48h(l.technicalVisitDate)),
+    ...data.installationsProgrammees.filter((l) => dansMoinsDe48h(l.installationDate)),
+  ];
 
   return (
     <div className="reminders-page">
@@ -131,6 +134,25 @@ export default function RemindersPage() {
                     Demandées le {new Date(lead.photosRequestedAt).toLocaleDateString("fr-FR")}
                   </div>
                 )}
+              </ReminderCard>
+            ))}
+          </div>
+        </div>
+
+        <div className="reminder-column">
+          <div className="reminder-column-header">
+            <span>Installation programmée</span>
+            <span className="count">{data.installationsProgrammees.length}</span>
+          </div>
+          <div className="reminder-column-body">
+            {data.installationsProgrammees.length === 0 && <p className="muted">Aucune installation programmée.</p>}
+            {data.installationsProgrammees.map((lead) => (
+              <ReminderCard key={lead.id} lead={lead}>
+                <div className="reminder-card-date">
+                  {lead.installationDate
+                    ? new Date(lead.installationDate).toLocaleString("fr-FR", { dateStyle: "medium", timeStyle: "short" })
+                    : "Date non précisée"}
+                </div>
               </ReminderCard>
             ))}
           </div>
