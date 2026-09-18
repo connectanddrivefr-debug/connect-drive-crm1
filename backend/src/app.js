@@ -7,6 +7,7 @@ const cors = require("cors");
 
 const authRoutes = require("./routes/auth");
 const leadRoutes = require("./routes/leads");
+const reminderRoutes = require("./routes/reminders");
 const quoteRoutes = require("./routes/quotes");
 const dashboardRoutes = require("./routes/dashboard");
 const webhookRoutes = require("./routes/webhooks");
@@ -23,6 +24,7 @@ app.get("/api/health", (req, res) => res.json({ ok: true }));
 
 app.use("/api/auth", authRoutes);
 app.use("/api/leads", leadRoutes);
+app.use("/api/reminders", reminderRoutes);
 app.use("/api/quotes", quoteRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/webhooks", webhookRoutes);

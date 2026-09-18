@@ -140,6 +140,8 @@ router.patch("/:id", async (req, res) => {
   const {
     firstName, lastName, email, phone, address, postalCode, city,
     sourceDetail, isProfessional, notesText, assignedToId,
+    technicalVisitStatus, technicalVisitDate, technicalVisitSlots,
+    callbackRequested, photosStatus,
   } = req.body;
 
   const before = await prisma.lead.findUnique({ where: { id: req.params.id } });
@@ -153,6 +155,42 @@ router.patch("/:id", async (req, res) => {
 
   const isNewAssignment = assignedToId !== undefined && assignedToId !== before?.assignedToId && assignedToId;
 
+  // --- Section "Rappels": horodatage automatique sur les transitions ---
+  const rappelData = {};
+  if (technicalVisitStatus !== undefined) {
+    rappelData.technicalVisitStatus = technicalVisitStatus;
+  }
+  if (technicalVisitDate !== undefined) {
+    rappelData.technicalVisitDate = technicalVisitDate ? new Date(technicalVisitDate) : null;
+    // Nouvelle date (ou date effacée) -> on autorise à nouveau le rappel J-2.
+    if (technicalVisitDate !== before.technicalVisitDate?.toISOString()) {
+      rappelData.technicalVisitReminderSentAt = null;
+    }
+  }
+  if (technicalVisitSlots !== undefined) {
+    rappelData.technicalVisitSlots = technicalVisitSlots || null;
+  }
+  if (callbackRequested !== undefined) {
+    rappelData.callbackRequested = Boolean(callbackRequested);
+    if (callbackRequested && !before.callbackRequested) {
+      rappelData.callbackRequestedAt = new Date();
+    }
+    if (!callbackRequested) {
+      rappelData.callbackRequestedAt = null;
+    }
+  }
+  if (photosStatus !== undefined) {
+    rappelData.photosStatus = photosStatus;
+    if (photosStatus === "EN_ATTENTE" && before.photosStatus !== "EN_ATTENTE") {
+      rappelData.photosRequestedAt = new Date();
+      rappelData.photosReminderSentAt = null; // nouveau cycle de relance
+    }
+    if (photosStatus === "RECUES" || photosStatus === "NON_DEMANDEES") {
+      rappelData.photosRequestedAt = photosStatus === "NON_DEMANDEES" ? null : before.photosRequestedAt;
+      rappelData.photosReminderSentAt = null;
+    }
+  }
+
   const lead = await prisma.lead.update({
     where: { id: req.params.id },
     data: {
@@ -160,6 +198,7 @@ router.patch("/:id", async (req, res) => {
       ...(sourceDetail !== undefined ? { sourceDetail: sourceDetail || null } : {}),
       ...(isProfessional !== undefined ? { isProfessional: Boolean(isProfessional) } : {}),
       notesText, assignedToId,
+      ...rappelData,
     },
     include: { assignedTo: true },
   });

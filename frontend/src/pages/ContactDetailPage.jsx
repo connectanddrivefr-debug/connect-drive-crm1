@@ -16,6 +16,26 @@ const SOURCE_DETAIL_SUGGESTIONS = [
   "V2C", "Facebook", "Bouche à oreille", "Salon / événement", "Ancien client", "Parrainage",
 ];
 
+const VISIT_STATUS_LABELS = {
+  NON_PROGRAMMEE: "Aucune visite en cours",
+  A_PROGRAMMER: "À programmer",
+  PROGRAMMEE: "Programmée",
+};
+
+const PHOTOS_STATUS_LABELS = {
+  NON_DEMANDEES: "Non demandées",
+  EN_ATTENTE: "En attente du client",
+  RECUES: "Reçues",
+};
+
+// "2026-09-20T14:30:00.000Z" -> "2026-09-20T14:30" (format attendu par <input type="datetime-local">)
+function toDatetimeLocal(isoString) {
+  if (!isoString) return "";
+  const d = new Date(isoString);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 const PRODUCTS = [
   { value: "V2C_TRYDAN", label: "V2C Trydan" },
   { value: "SMAPPEE_EV_WALL", label: "Smappee EV Wall" },
@@ -82,6 +102,8 @@ export default function ContactDetailPage() {
   const [addressForm, setAddressForm] = useState({ address: "", postalCode: "", city: "" });
   const [editingOrigin, setEditingOrigin] = useState(false);
   const [originForm, setOriginForm] = useState({ sourceDetail: "", isProfessional: false });
+  const [visitSlots, setVisitSlots] = useState("");
+  const [visitDate, setVisitDate] = useState("");
 
   async function load() {
     const data = await api.getLead(id);
@@ -94,6 +116,39 @@ export default function ContactDetailPage() {
     // le sélecteur d'assignation reste simplement caché dans ce cas.
     api.getUsers().then(setUsers).catch(() => setUsers(null));
   }, [id]);
+
+  useEffect(() => {
+    if (!lead) return;
+    setVisitSlots(lead.technicalVisitSlots || "");
+    setVisitDate(toDatetimeLocal(lead.technicalVisitDate));
+  }, [lead?.id, lead?.technicalVisitSlots, lead?.technicalVisitDate]);
+
+  async function changeVisitStatus(status) {
+    await api.updateLead(id, { technicalVisitStatus: status });
+    load();
+  }
+
+  async function saveVisitSlots(e) {
+    e.preventDefault();
+    await api.updateLead(id, { technicalVisitSlots: visitSlots.trim() || null });
+    load();
+  }
+
+  async function saveVisitDate(e) {
+    e.preventDefault();
+    await api.updateLead(id, { technicalVisitDate: visitDate ? new Date(visitDate).toISOString() : null });
+    load();
+  }
+
+  async function toggleCallback(checked) {
+    await api.updateLead(id, { callbackRequested: checked });
+    load();
+  }
+
+  async function changePhotosStatus(status) {
+    await api.updateLead(id, { photosStatus: status });
+    load();
+  }
 
   async function changeAssignment(userId) {
     await api.updateLead(id, { assignedToId: userId || null });
@@ -201,7 +256,7 @@ export default function ContactDetailPage() {
       {lead.estimatedPrice != null && (
         <div className="price-callout">
           <span className="price-callout-label">Prix estimé (simulateur)</span>
-          <span className="price-callout-value">{Number(lead.estimatedPrice).toLocaleString("fr-FR")} € TTC</span>
+          <span className="price-callout-value">{Number(lead.estimatedPrice).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € TTC</span>
         </div>
       )}
 
@@ -368,12 +423,66 @@ export default function ContactDetailPage() {
         </section>
 
         <section className="card">
+          <h3>Rappels</h3>
+          <div className="info-list">
+            <div className="info-field">
+              <span className="info-label">Visite technique</span>
+              <select value={lead.technicalVisitStatus} onChange={(e) => changeVisitStatus(e.target.value)}>
+                {Object.entries(VISIT_STATUS_LABELS).map(([key, label]) => (
+                  <option key={key} value={key}>{label}</option>
+                ))}
+              </select>
+            </div>
+
+            {lead.technicalVisitStatus === "A_PROGRAMMER" && (
+              <form onSubmit={saveVisitSlots} className="inline-form">
+                <input
+                  placeholder="Créneaux dispo du client (ex: mardi/jeudi après-midi)"
+                  value={visitSlots}
+                  onChange={(e) => setVisitSlots(e.target.value)}
+                />
+                <button type="submit" className="btn-primary">Enregistrer</button>
+              </form>
+            )}
+
+            {lead.technicalVisitStatus === "PROGRAMMEE" && (
+              <form onSubmit={saveVisitDate} className="inline-form">
+                <input
+                  type="datetime-local"
+                  value={visitDate}
+                  onChange={(e) => setVisitDate(e.target.value)}
+                />
+                <button type="submit" className="btn-primary">Enregistrer</button>
+              </form>
+            )}
+
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={Boolean(lead.callbackRequested)}
+                onChange={(e) => toggleCallback(e.target.checked)}
+              />
+              Client à rappeler
+            </label>
+
+            <div className="info-field">
+              <span className="info-label">Photos</span>
+              <select value={lead.photosStatus} onChange={(e) => changePhotosStatus(e.target.value)}>
+                {Object.entries(PHOTOS_STATUS_LABELS).map(([key, label]) => (
+                  <option key={key} value={key}>{label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </section>
+
+        <section className="card">
           <h3>Devis</h3>
           {lead.quotes.length === 0 && <p className="muted">Aucun devis envoyé.</p>}
           {lead.quotes.map((q) => (
             <div key={q.id} className="quote-row">
               <span>{PRODUCTS.find((p) => p.value === q.product)?.label || q.product}</span>
-              <span>{Number(q.amount).toLocaleString("fr-FR")} €</span>
+              <span>{Number(q.amount).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span>
               <span className={`badge badge-quote-${q.status.toLowerCase()}`}>{q.status}</span>
               <span className="muted">{new Date(q.sentAt).toLocaleDateString("fr-FR")}</span>
             </div>

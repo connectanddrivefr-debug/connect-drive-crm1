@@ -63,6 +63,21 @@ enum LeadSource {
   AUTRE
 }
 
+// ---------------------------------------------------------------------------
+// Section "Rappels": visites techniques, demandes de rappel client, photos
+// ---------------------------------------------------------------------------
+enum TechnicalVisitStatus {
+  NON_PROGRAMMEE // pas de visite technique en cours pour ce lead
+  A_PROGRAMMER   // à planifier — voir technicalVisitSlots pour les dispos client
+  PROGRAMMEE     // planifiée — voir technicalVisitDate
+}
+
+enum PhotosStatus {
+  NON_DEMANDEES
+  EN_ATTENTE // demandées au client, pas encore reçues
+  RECUES
+}
+
 model Lead {
   id            String     @id @default(uuid())
 
@@ -87,6 +102,21 @@ model Lead {
   // Client professionnel (entreprise) plutôt que particulier — affiché
   // comme étiquette "Pro" sur la carte et la fiche du lead.
   isProfessional Boolean   @default(false)
+
+  // --- Section "Rappels" ---
+  technicalVisitStatus TechnicalVisitStatus @default(NON_PROGRAMMEE)
+  technicalVisitDate   DateTime? // si PROGRAMMEE
+  technicalVisitSlots  String?   // créneaux dispo du client si A_PROGRAMMER
+  // Empêche de renvoyer plusieurs fois le rappel J-2 pour la même date de visite.
+  technicalVisitReminderSentAt DateTime?
+
+  callbackRequested   Boolean   @default(false) // "client à rappeler"
+  callbackRequestedAt DateTime?
+
+  photosStatus         PhotosStatus @default(NON_DEMANDEES)
+  photosRequestedAt    DateTime?
+  // Une seule relance automatique par demande de photos (comme pour les devis).
+  photosReminderSentAt DateTime?
 
   // Prix affiché au client à la fin du simulateur de devis (connectndrive.fr),
   // avant tout devis formel envoyé par un commercial (voir modèle Quote).
@@ -168,6 +198,8 @@ enum EmailType {
   RELANCE_DEVIS
   RAPPEL_INTERNE
   CONFIRMATION_SIGNATURE
+  RAPPEL_VISITE
+  RAPPEL_PHOTOS
   AUTRE
 }
 

@@ -2,6 +2,8 @@
 // Protégées par un secret pour éviter que n'importe qui déclenche les jobs.
 const express = require("express");
 const { runQuoteReminders } = require("../jobs/quoteReminders");
+const { runVisitReminders } = require("../jobs/visitReminders");
+const { runPhotoReminders } = require("../jobs/photoReminders");
 const { pollWebflowLeads } = require("../integrations/webflowGmailPoll");
 
 const router = express.Router();
@@ -18,6 +20,26 @@ function checkCronSecret(req, res, next) {
 router.get("/quote-reminders", checkCronSecret, async (req, res) => {
   try {
     const n = await runQuoteReminders();
+    res.json({ ok: true, remindersSent: n });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get("/visit-reminders", checkCronSecret, async (req, res) => {
+  try {
+    const n = await runVisitReminders();
+    res.json({ ok: true, remindersSent: n });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get("/photo-reminders", checkCronSecret, async (req, res) => {
+  try {
+    const n = await runPhotoReminders();
     res.json({ ok: true, remindersSent: n });
   } catch (err) {
     console.error(err);

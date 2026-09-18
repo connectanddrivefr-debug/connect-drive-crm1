@@ -214,10 +214,53 @@ async function sendSignatureConfirmation(lead, assignedUser = null) {
   });
 }
 
+// --- Section "Rappels" — relances internes, uniquement chez le commercial
+// assigné (jamais l'admin en fallback: si aucun commercial n'est assigné,
+// on n'envoie rien, voir jobs/visitReminders.js et jobs/photoReminders.js) ---
+
+// Rappel J-2 avant une visite technique programmée: on demande au commercial
+// de reconfirmer le rendez-vous avec le client et le technicien.
+async function sendVisitReminderInternal(lead, assignedUser) {
+  if (!assignedUser?.email) return; // pas de commercial assigné -> pas d'email
+  const dateStr = lead.technicalVisitDate
+    ? new Date(lead.technicalVisitDate).toLocaleString("fr-FR", { dateStyle: "long", timeStyle: "short" })
+    : "date non précisée";
+  return sendEmail({
+    to: assignedUser.email,
+    subject: `Rappel: visite technique dans 2 jours — ${lead.firstName || ""} ${lead.lastName || ""}`,
+    htmlContent: `
+      <p>Bonjour ${assignedUser.firstName || ""},</p>
+      <p>Une visite technique est programmée le <strong>${dateStr}</strong> pour ${lead.firstName || ""} ${lead.lastName || ""} (${lead.phone || lead.email}).</p>
+      <p>Merci de reconfirmer ce rendez-vous avec le technicien et avec le client pour vous assurer qu'il est toujours bon.</p>
+    `,
+    leadId: lead.id,
+    type: "RAPPEL_VISITE",
+  });
+}
+
+// Relance interne 2 jours après passage en "en attente de photos": le client
+// n'a toujours pas envoyé ses photos, on invite le commercial à le relancer.
+async function sendPhotoReminderInternal(lead, assignedUser) {
+  if (!assignedUser?.email) return; // pas de commercial assigné -> pas d'email
+  return sendEmail({
+    to: assignedUser.email,
+    subject: `Rappel: photos non reçues — ${lead.firstName || ""} ${lead.lastName || ""}`,
+    htmlContent: `
+      <p>Bonjour ${assignedUser.firstName || ""},</p>
+      <p>${lead.firstName || ""} ${lead.lastName || ""} (${lead.phone || lead.email}) n'a toujours pas envoyé les photos demandées.</p>
+      <p>N'hésite pas à relancer le client.</p>
+    `,
+    leadId: lead.id,
+    type: "RAPPEL_PHOTOS",
+  });
+}
+
 module.exports = {
   sendLeadConfirmation,
   sendInternalNewLeadNotif,
   sendQuoteReminder,
   sendInternalReminderNotif,
   sendSignatureConfirmation,
+  sendVisitReminderInternal,
+  sendPhotoReminderInternal,
 };

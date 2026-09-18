@@ -168,9 +168,13 @@ export default function KanbanPage() {
                         <span className={`badge badge-${lead.source.toLowerCase()}`}>{lead.source}</span>
                         {lead.sourceDetail && <span className="badge">{lead.sourceDetail}</span>}
                         {lead.isProfessional && <span className="badge badge-pro">Pro</span>}
+                        {lead.technicalVisitStatus === "PROGRAMMEE" && <span className="badge badge-rappel">Visite prog.</span>}
+                        {lead.technicalVisitStatus === "A_PROGRAMMER" && <span className="badge badge-rappel">Visite à prog.</span>}
+                        {lead.callbackRequested && <span className="badge badge-rappel">À rappeler</span>}
+                        {lead.photosStatus === "EN_ATTENTE" && <span className="badge badge-rappel">Photos</span>}
                       </div>
                       {lead.estimatedPrice != null && (
-                        <span className="lead-card-price">{Number(lead.estimatedPrice).toLocaleString("fr-FR")} €</span>
+                        <span className="lead-card-price">{Number(lead.estimatedPrice).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span>
                       )}
                     </Link>
                   ))}

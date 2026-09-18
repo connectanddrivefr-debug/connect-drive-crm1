@@ -54,6 +54,8 @@ export const api = {
 
   getUsers: () => request("/users"),
 
+  getReminders: () => request("/reminders"),
+
   exportLeadsCsv: async () => {
     const token = getToken();
     const res = await fetch(`${BASE_URL}/leads/export/csv`, {
