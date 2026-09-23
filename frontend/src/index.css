@@ -140,23 +140,17 @@ main { padding: 24px; max-width: 1400px; margin: 0 auto; }
 .badge-spam { background: #fee2e2; color: #b91c1c; font-weight: 700; }
 .lead-card-badges { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 
-/* Numéros non vérifiés (suspicion de spam, source SIMULATEUR uniquement) */
-.unverified-section {
-  background: var(--card-bg); border: 1px solid #fecaca; border-radius: var(--radius-md);
-  margin-bottom: 18px; overflow: hidden;
+/* Numéros non vérifiés (suspicion de spam, source connectndrive.fr /
+   simulateur uniquement) — colonne de prequalification à gauche du pipeline,
+   avant que le lead ne rejoigne le pipeline normal (voir GET /api/leads/unverified). */
+.unverified-column { border-color: #fecaca; }
+.unverified-column-header { background: #fef2f2; color: #b91c1c; border-bottom-color: #fecaca; }
+.unverified-column-header .count { color: #b91c1c; font-weight: 700; }
+.unverified-column-note {
+  font-size: 11px; color: #b91c1c; background: #fef2f2; line-height: 1.4;
 }
-.unverified-section-header {
-  display: flex; justify-content: space-between; align-items: center; padding: 12px 16px;
-  font-weight: 700; color: #b91c1c; background: #fef2f2; border-bottom: 1px solid #fecaca;
-}
-.unverified-section-header .count { color: #b91c1c; font-weight: 700; }
-.unverified-section-body {
-  padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 10px;
-}
-.unverified-card {
-  cursor: default; width: 220px; display: flex; flex-direction: column; gap: 6px;
-}
-.unverified-card .btn-primary { margin-top: 4px; padding: 5px 10px; font-size: 12px; }
+.unverified-card { display: flex; flex-direction: column; gap: 6px; cursor: grab; }
+.unverified-card-btn { margin-top: 2px; padding: 5px 10px; font-size: 12px; align-self: flex-start; }
 .unverified-callout {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   background: #fef2f2; border: 1px solid #fecaca; border-radius: 10px;

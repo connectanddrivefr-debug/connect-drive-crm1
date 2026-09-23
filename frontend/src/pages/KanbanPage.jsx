@@ -101,6 +101,26 @@ export default function KanbanPage() {
     setDragOverCol(null);
     const leadId = window.__draggedLeadId;
     if (!leadId) return;
+    const fromUnverified = window.__draggedFromUnverified;
+    window.__draggedFromUnverified = false;
+
+    // Glisser une carte depuis la colonne "Non vérifié" vers une colonne du
+    // pipeline = on considère le lead comme prequalifié: on lève le doute
+    // (phoneVerified: true) en même temps qu'on lui donne son statut, comme
+    // pour un lead normal.
+    if (fromUnverified) {
+      setUnverifiedLeads((prev) => (prev ? prev.filter((l) => l.id !== leadId) : prev));
+      try {
+        await api.updateLead(leadId, { phoneVerified: true });
+        await api.updateLeadStatus(leadId, status);
+      } catch (err) {
+        alert(`Erreur: ${err.message}`);
+      }
+      load();
+      loadUnverified();
+      return;
+    }
+
     // Optimistic update
     setLeads((prev) => prev.map((l) => (l.id === leadId ? { ...l, status } : l)));
     try {
@@ -152,41 +172,55 @@ export default function KanbanPage() {
         </div>
       )}
 
-      {unverifiedLeads && unverifiedLeads.length > 0 && (
-        <div className="unverified-section">
-          <div className="unverified-section-header">
-            <span>⚠️ Numéros non vérifiés — suspicion de spam</span>
-            <span className="count">{unverifiedLeads.length}</span>
-          </div>
-          <div className="unverified-section-body">
-            {unverifiedLeads.map((lead) => (
-              <div key={lead.id} className="lead-card unverified-card">
-                <Link to={`/leads/${lead.id}`} className="lead-card-name">
-                  {lead.firstName || ""} {lead.lastName || ""}
-                  {!lead.firstName && !lead.lastName && lead.email}
-                </Link>
-                <div className="lead-card-meta">{lead.email}</div>
-                <div className="lead-card-meta">{lead.phone || "—"}</div>
-                <div className="lead-card-badges">
-                  <span className="badge badge-spam">Non vérifié</span>
-                </div>
-                <button
-                  type="button"
-                  className="btn-primary"
-                  onClick={() => markPhoneVerified(lead.id)}
-                >
-                  Marquer comme vérifié
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {loading ? (
         <p>Chargement…</p>
       ) : (
         <div className="kanban-board">
+          {unverifiedLeads && (
+            <div className="kanban-column unverified-column">
+              <div className="kanban-column-header unverified-column-header">
+                <span>⚠️ Non vérifié</span>
+                <span className="count">{unverifiedLeads.length}</span>
+              </div>
+              <div className="kanban-column-monthbar unverified-column-note">
+                Leads connectndrive.fr avec numéro non confirmé par SMS (Twilio) —
+                à prequalifier avant de les faire entrer dans le pipeline.
+              </div>
+              <div className="kanban-column-body">
+                {unverifiedLeads.map((lead) => (
+                  <div
+                    key={lead.id}
+                    className="lead-card unverified-card"
+                    draggable
+                    onDragStart={() => {
+                      window.__draggedLeadId = lead.id;
+                      window.__draggedFromUnverified = true;
+                    }}
+                  >
+                    <Link to={`/leads/${lead.id}`} className="lead-card-name">
+                      {lead.firstName || ""} {lead.lastName || ""}
+                      {!lead.firstName && !lead.lastName && lead.email}
+                    </Link>
+                    <div className="lead-card-meta">{lead.email}</div>
+                    <div className="lead-card-meta">{lead.phone || "—"}</div>
+                    <div className="lead-card-badges">
+                      <span className="badge badge-spam">Non vérifié</span>
+                    </div>
+                    {lead.estimatedPrice != null && (
+                      <span className="lead-card-price">{Number(lead.estimatedPrice).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span>
+                    )}
+                    <button
+                      type="button"
+                      className="btn-primary unverified-card-btn"
+                      onClick={() => markPhoneVerified(lead.id)}
+                    >
+                      Marquer comme vérifié
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           {COLUMNS.map((col) => {
             const isSigneCol = col.key === "SIGNE";
             const columnLeads = isSigneCol
