@@ -55,9 +55,11 @@ router.get("/", async (req, res) => {
 // vérifié par SMS (suspicion de spam), réservé à l'admin. Ces leads sont
 // exclus du pipeline normal (voir GET /) mais restent consultables ici pour
 // vérification manuelle (voir PATCH /:id avec { phoneVerified: true }).
+// Un lead déclaré spam (statut PERDU, voir PATCH /:id/status) sort de cette
+// liste — il reste tracé en base mais n'a plus besoin d'être traité.
 router.get("/unverified", requireRole("ADMIN"), async (req, res) => {
   const leads = await prisma.lead.findMany({
-    where: { source: "SIMULATEUR", phoneVerified: false },
+    where: { source: "SIMULATEUR", phoneVerified: false, status: { not: "PERDU" } },
     orderBy: { createdAt: "desc" },
     include: { quotes: true, assignedTo: true },
   });
