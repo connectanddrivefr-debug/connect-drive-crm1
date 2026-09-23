@@ -137,7 +137,31 @@ main { padding: 24px; max-width: 1400px; margin: 0 auto; }
 .badge-simulateur { background: #fef3c7; color: #b45309; }
 .badge-pro { background: #fee2e2; color: #b91c1c; font-weight: 700; }
 .badge-rappel { background: #fef3c7; color: #92400e; font-weight: 600; }
+.badge-spam { background: #fee2e2; color: #b91c1c; font-weight: 700; }
 .lead-card-badges { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+
+/* Numéros non vérifiés (suspicion de spam, source SIMULATEUR uniquement) */
+.unverified-section {
+  background: var(--card-bg); border: 1px solid #fecaca; border-radius: var(--radius-md);
+  margin-bottom: 18px; overflow: hidden;
+}
+.unverified-section-header {
+  display: flex; justify-content: space-between; align-items: center; padding: 12px 16px;
+  font-weight: 700; color: #b91c1c; background: #fef2f2; border-bottom: 1px solid #fecaca;
+}
+.unverified-section-header .count { color: #b91c1c; font-weight: 700; }
+.unverified-section-body {
+  padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 10px;
+}
+.unverified-card {
+  cursor: default; width: 220px; display: flex; flex-direction: column; gap: 6px;
+}
+.unverified-card .btn-primary { margin-top: 4px; padding: 5px 10px; font-size: 12px; }
+.unverified-callout {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  background: #fef2f2; border: 1px solid #fecaca; border-radius: 10px;
+  padding: 12px 18px; margin-bottom: 16px; color: #b91c1c; font-weight: 600;
+}
 .checkbox-label { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); margin-top: 10px; }
 .checkbox-label input { width: auto; margin-top: 0; }
 

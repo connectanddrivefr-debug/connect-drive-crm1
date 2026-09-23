@@ -56,6 +56,10 @@ export const api = {
 
   getReminders: () => request("/reminders"),
 
+  // Leads simulateur avec numéro de téléphone non vérifié par SMS (Twilio),
+  // suspicion de spam — voir GET /api/leads/unverified (admin uniquement).
+  getUnverifiedLeads: () => request("/leads/unverified"),
+
   exportLeadsCsv: async () => {
     const token = getToken();
     const res = await fetch(`${BASE_URL}/leads/export/csv`, {

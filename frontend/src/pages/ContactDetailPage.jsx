@@ -173,6 +173,11 @@ export default function ContactDetailPage() {
     load();
   }
 
+  async function markPhoneVerified() {
+    await api.updateLead(id, { phoneVerified: true });
+    load();
+  }
+
   async function handleDelete() {
     const nom = `${lead?.firstName || ""} ${lead?.lastName || ""}`.trim() || lead?.email;
     if (!window.confirm(`Supprimer définitivement le lead "${nom}" ? Cette action est irréversible.`)) {
@@ -270,6 +275,15 @@ export default function ContactDetailPage() {
           </button>
         )}
       </div>
+
+      {lead.source === "SIMULATEUR" && lead.phoneVerified === false && (
+        <div className="unverified-callout">
+          <span>⚠️ Numéro de téléphone non vérifié — suspicion de spam</span>
+          <button type="button" className="btn-primary" onClick={markPhoneVerified}>
+            Marquer comme vérifié
+          </button>
+        </div>
+      )}
 
       {lead.estimatedPrice != null && (
         <div className="price-callout">

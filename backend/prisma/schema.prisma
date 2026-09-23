@@ -103,6 +103,16 @@ model Lead {
   // changer pour d'autres raisons après la signature.
   signedAt      DateTime?
 
+  // Vérification du numéro de téléphone par SMS (Twilio), mise en place sur
+  // le site connectndrive.fr (source SIMULATEUR uniquement — Webflow, Meta et
+  // les ajouts manuels/admin n'ont pas ce mécanisme et restent toujours
+  // considérés comme vérifiés, valeur par défaut true).
+  // Un lead SIMULATEUR avec phoneVerified=false est retiré du pipeline normal
+  // et apparaît séparément dans la section "Numéros non vérifiés" (suspicion
+  // de spam) — voir GET /api/leads/unverified.
+  phoneVerified   Boolean   @default(true)
+  phoneVerifiedAt DateTime?
+
   source        LeadSource @default(MANUEL)
   // Précision libre de la provenance pour les leads ajoutés manuellement
   // (ex: "V2C", "Facebook", "Bouche à oreille") — affichée comme étiquette

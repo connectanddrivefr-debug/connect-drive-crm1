@@ -28,6 +28,9 @@ export default function KanbanPage() {
   const [assigneeFilter, setAssigneeFilter] = useState("ALL"); // ALL | ME | UNASSIGNED | <userId>
   const currentMonthStr = useMemo(() => new Date().toISOString().slice(0, 7), []);
   const [signedMonth, setSignedMonth] = useState(currentMonthStr);
+  // Leads simulateur avec numéro de téléphone non vérifié (Twilio) — suspicion
+  // de spam, réservé à l'admin (voir GET /api/leads/unverified).
+  const [unverifiedLeads, setUnverifiedLeads] = useState(null);
 
   const currentUser = getCurrentUser();
 
@@ -41,11 +44,23 @@ export default function KanbanPage() {
     }
   }
 
+  function loadUnverified() {
+    api.getUnverifiedLeads().then(setUnverifiedLeads).catch(() => setUnverifiedLeads(null));
+  }
+
+  async function markPhoneVerified(leadId) {
+    await api.updateLead(leadId, { phoneVerified: true });
+    loadUnverified();
+    load();
+  }
+
   useEffect(() => {
     load();
     // Échoue silencieusement si l'utilisateur n'est pas admin (403) — le
-    // filtre par commercial reste alors simplement caché.
+    // filtre par commercial et la section "numéros non vérifiés" restent
+    // alors simplement cachés.
     api.getUsers().then(setUsers).catch(() => setUsers(null));
+    loadUnverified();
   }, []);
 
   const visibleLeads = useMemo(() => {
@@ -134,6 +149,37 @@ export default function KanbanPage() {
           >
             Non assigné
           </button>
+        </div>
+      )}
+
+      {unverifiedLeads && unverifiedLeads.length > 0 && (
+        <div className="unverified-section">
+          <div className="unverified-section-header">
+            <span>⚠️ Numéros non vérifiés — suspicion de spam</span>
+            <span className="count">{unverifiedLeads.length}</span>
+          </div>
+          <div className="unverified-section-body">
+            {unverifiedLeads.map((lead) => (
+              <div key={lead.id} className="lead-card unverified-card">
+                <Link to={`/leads/${lead.id}`} className="lead-card-name">
+                  {lead.firstName || ""} {lead.lastName || ""}
+                  {!lead.firstName && !lead.lastName && lead.email}
+                </Link>
+                <div className="lead-card-meta">{lead.email}</div>
+                <div className="lead-card-meta">{lead.phone || "—"}</div>
+                <div className="lead-card-badges">
+                  <span className="badge badge-spam">Non vérifié</span>
+                </div>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={() => markPhoneVerified(lead.id)}
+                >
+                  Marquer comme vérifié
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

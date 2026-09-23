@@ -332,6 +332,12 @@ router.post("/simulateur", async (req, res) => {
       //   capture côté serveur au moment de la soumission
       // - pageUrl: URL de la page où le lead a validé sa demande
       fbclid, fbc, fbp, clientIp, userAgent, pageUrl,
+      // Vérification du numéro par SMS (Twilio), mise en place côté site.
+      // telephoneVerifie: booléen — true si le code SMS a été validé.
+      // telephoneVerifieLe: date/heure ISO de la vérification (optionnel).
+      // Absent (ancien front pas encore à jour) -> traité comme vérifié, pour
+      // ne pas basculer des leads normaux en "suspicion de spam" par erreur.
+      telephoneVerifie, telephoneVerifieLe,
     } = req.body || {};
 
     if (!email) {
@@ -339,6 +345,8 @@ router.post("/simulateur", async (req, res) => {
     }
 
     const estimatedPrice = parsePrice(prix !== undefined ? prix : prixEstimation);
+    const phoneVerified = telephoneVerifie === undefined ? true : Boolean(telephoneVerifie);
+    const phoneVerifiedAt = telephoneVerifieLe ? new Date(telephoneVerifieLe) : (phoneVerified ? new Date() : null);
 
     // Anti-doublon: même email + source SIMULATEUR dans les 5 dernières minutes
     const recent = await prisma.lead.findFirst({
@@ -351,8 +359,18 @@ router.post("/simulateur", async (req, res) => {
     if (recent) {
       // Si le prix n'avait pas encore été reçu (ex: doublon de retry réseau
       // avant que le calcul ne soit prêt), on le complète.
+      const patch = {};
       if (estimatedPrice !== null && recent.estimatedPrice === null) {
-        await prisma.lead.update({ where: { id: recent.id }, data: { estimatedPrice } });
+        patch.estimatedPrice = estimatedPrice;
+      }
+      // Idem si la vérification du téléphone arrive après coup (ex: la
+      // validation SMS se termine après l'envoi initial du formulaire).
+      if (telephoneVerifie !== undefined && !recent.phoneVerified && phoneVerified) {
+        patch.phoneVerified = true;
+        patch.phoneVerifiedAt = phoneVerifiedAt;
+      }
+      if (Object.keys(patch).length > 0) {
+        await prisma.lead.update({ where: { id: recent.id }, data: patch });
       }
       return res.status(200).json({ ok: true, deduped: true, leadId: recent.id });
     }
@@ -382,6 +400,8 @@ router.post("/simulateur", async (req, res) => {
         source: "SIMULATEUR",
         status: "NOUVEAU",
         estimatedPrice,
+        phoneVerified,
+        phoneVerifiedAt,
         notesText: notesLines.length ? notesLines.join("\n\n") : null,
         statusHistory: { create: { toStatus: "NOUVEAU", changedBy: "simulateur_webhook" } },
       },

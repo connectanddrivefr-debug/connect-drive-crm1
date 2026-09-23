@@ -141,12 +141,24 @@ async function sendLeadConfirmation(lead, assignedUser = null) {
 
 // --- Règle 2: Nouveau lead -> notification interne ---
 // Envoyée au commercial assigné s'il y en a un, sinon à Julien (admin).
+// Si le numéro de téléphone n'a pas été vérifié par SMS (Twilio, simulateur
+// connectndrive.fr uniquement), on ajoute une mention bien visible en tête
+// de l'email pour alerter l'équipe (suspicion de spam) — le lead continue
+// néanmoins à recevoir l'email de confirmation et le signal Meta CAPI
+// normalement, seule la notification interne est modifiée.
 async function sendInternalNewLeadNotif(lead, assignedUser = null) {
   const to = assignedUser?.email || process.env.ADMIN_EMAIL;
+  const isUnverified = lead.source === "SIMULATEUR" && lead.phoneVerified === false;
+  const warningHtml = isUnverified
+    ? `<p style="background:#fee2e2;color:#b91c1c;font-weight:bold;padding:10px 14px;border-radius:6px;">
+         ⚠️ Numéro de téléphone non vérifié — suspicion de spam
+       </p>`
+    : "";
   return sendEmail({
     to,
-    subject: `Nouveau lead: ${lead.firstName || ""} ${lead.lastName || ""} (${lead.source})`,
+    subject: `${isUnverified ? "[Non vérifié] " : ""}Nouveau lead: ${lead.firstName || ""} ${lead.lastName || ""} (${lead.source})`,
     htmlContent: `
+      ${warningHtml}
       <p>Nouveau lead reçu via <strong>${lead.source}</strong>.</p>
       <ul>
         <li>Nom: ${lead.firstName || ""} ${lead.lastName || ""}</li>

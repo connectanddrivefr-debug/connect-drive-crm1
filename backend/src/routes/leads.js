@@ -15,29 +15,50 @@ const VALID_STATUSES = ["NOUVEAU", "CONTACTE", "DEVIS_ENVOYE", "SIGNE", "PERDU"]
 // GET /api/leads?status=&source=&q=
 router.get("/", async (req, res) => {
   const { status, source, q, unassignedOnly } = req.query;
-  const where = {};
-  if (status) where.status = status;
-  if (source) where.source = source;
+  const filters = [];
+  if (status) filters.push({ status });
+  if (source) filters.push({ source });
   // Phase 2: un commercial ne voit que ses propres leads assignés.
   // L'admin (Julien) voit tout, y compris les leads d'Angélique/Ilham.
   if (req.user.role === "COMMERCIAL") {
-    where.assignedToId = req.user.id;
+    filters.push({ assignedToId: req.user.id });
   }
   if (unassignedOnly === "true") {
-    where.assignedToId = null;
+    filters.push({ assignedToId: null });
   }
   if (q) {
-    where.OR = [
-      { firstName: { contains: q, mode: "insensitive" } },
-      { lastName: { contains: q, mode: "insensitive" } },
-      { email: { contains: q, mode: "insensitive" } },
-      { postalCode: { contains: q } },
-    ];
+    filters.push({
+      OR: [
+        { firstName: { contains: q, mode: "insensitive" } },
+        { lastName: { contains: q, mode: "insensitive" } },
+        { email: { contains: q, mode: "insensitive" } },
+        { postalCode: { contains: q } },
+      ],
+    });
   }
+  // Numéro de téléphone non vérifié (Twilio, simulateur connectndrive.fr
+  // uniquement — voir schema.prisma): ces leads sont retirés du pipeline
+  // normal et n'apparaissent que dans GET /api/leads/unverified, pour ne
+  // pas mélanger les suspicions de spam avec les leads Webflow/Meta/manuels
+  // qui restent, eux, toujours considérés comme vérifiés.
+  filters.push({ NOT: { AND: [{ source: "SIMULATEUR" }, { phoneVerified: false }] } });
 
   const leads = await prisma.lead.findMany({
-    where,
+    where: { AND: filters },
     orderBy: { updatedAt: "desc" },
+    include: { quotes: true, assignedTo: true },
+  });
+  res.json(leads);
+});
+
+// GET /api/leads/unverified — leads simulateur avec numéro de téléphone non
+// vérifié par SMS (suspicion de spam), réservé à l'admin. Ces leads sont
+// exclus du pipeline normal (voir GET /) mais restent consultables ici pour
+// vérification manuelle (voir PATCH /:id avec { phoneVerified: true }).
+router.get("/unverified", requireRole("ADMIN"), async (req, res) => {
+  const leads = await prisma.lead.findMany({
+    where: { source: "SIMULATEUR", phoneVerified: false },
+    orderBy: { createdAt: "desc" },
     include: { quotes: true, assignedTo: true },
   });
   res.json(leads);
@@ -57,11 +78,12 @@ router.get("/export/csv", requireRole("ADMIN"), async (req, res) => {
   };
 
   const header = [
-    "Prénom", "Nom", "Email", "Téléphone", "Adresse", "Code postal", "Ville",
+    "Prénom", "Nom", "Email", "Téléphone", "Téléphone vérifié", "Adresse", "Code postal", "Ville",
     "Source", "Provenance (détail)", "Client pro", "Statut", "Commercial assigné", "Montant devis", "Notes", "Créé le",
   ];
   const rows = leads.map((l) => [
-    l.firstName, l.lastName, l.email, l.phone, l.address, l.postalCode, l.city,
+    l.firstName, l.lastName, l.email, l.phone, l.phoneVerified ? "Oui" : "Non (suspicion de spam)",
+    l.address, l.postalCode, l.city,
     l.source, l.sourceDetail || "", l.isProfessional ? "Oui" : "Non", l.status,
     l.assignedTo ? `${l.assignedTo.firstName} ${l.assignedTo.lastName}` : "",
     l.quotes[0] ? Number(l.quotes[0].amount) : "",
@@ -165,6 +187,7 @@ router.patch("/:id", async (req, res) => {
     technicalVisitStatus, technicalVisitDate, technicalVisitSlots,
     callbackRequested, photosStatus,
     installationStatus, installationDate,
+    phoneVerified,
   } = req.body;
 
   const before = await prisma.lead.findUnique({ where: { id: req.params.id } });
@@ -221,6 +244,14 @@ router.patch("/:id", async (req, res) => {
     // Nouvelle date (ou date effacée) -> on autorise à nouveau le rappel J-2.
     if (installationDate !== before.installationDate?.toISOString()) {
       rappelData.installationReminderSentAt = null;
+    }
+  }
+  // Vérification manuelle d'un numéro par l'admin depuis la section "Numéros
+  // non vérifiés": fait ressortir le lead du côté du pipeline normal.
+  if (phoneVerified !== undefined) {
+    rappelData.phoneVerified = Boolean(phoneVerified);
+    if (phoneVerified && !before.phoneVerifiedAt) {
+      rappelData.phoneVerifiedAt = new Date();
     }
   }
 
