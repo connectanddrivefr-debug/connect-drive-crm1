@@ -1,9 +1,17 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
 
 function leadName(lead) {
   return `${lead.firstName || ""} ${lead.lastName || ""}`.trim() || lead.email;
+}
+
+// "2026-09" -> "Septembre 2026" — même sélecteur de mois que la colonne
+// "Signé" du pipeline, appliqué ici aux installations programmées.
+function monthLabel(monthStr) {
+  const [y, m] = monthStr.split("-").map(Number);
+  const label = new Date(y, m - 1, 1).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+  return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
 function daysUntil(dateStr) {
@@ -27,6 +35,8 @@ function ReminderCard({ lead, children }) {
 export default function RemindersPage() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const currentMonthStr = useMemo(() => new Date().toISOString().slice(0, 7), []);
+  const [installationMonth, setInstallationMonth] = useState(currentMonthStr);
 
   async function load() {
     setLoading(true);
@@ -43,6 +53,22 @@ export default function RemindersPage() {
   }, []);
 
   if (loading || !data) return <p>Chargement…</p>;
+
+  // Mois disponibles pour la colonne "Installation programmée": tous les
+  // mois où au moins une installation est programmée, plus le mois en
+  // cours même s'il est encore vide — même logique que la colonne "Signé"
+  // du pipeline.
+  const installationMonths = Array.from(
+    new Set([
+      currentMonthStr,
+      ...data.installationsProgrammees
+        .filter((l) => l.installationDate)
+        .map((l) => l.installationDate.slice(0, 7)),
+    ])
+  ).sort().reverse();
+  const installationsDuMois = data.installationsProgrammees.filter(
+    (l) => l.installationDate && l.installationDate.slice(0, 7) === installationMonth
+  );
 
   // Visites et installations programmées dans les 2 prochains jours -> à
   // reconfirmer avec le technicien et le client (même logique que le rappel
@@ -142,11 +168,18 @@ export default function RemindersPage() {
         <div className="reminder-column">
           <div className="reminder-column-header">
             <span>Installation programmée</span>
-            <span className="count">{data.installationsProgrammees.length}</span>
+            <span className="count">{installationsDuMois.length}</span>
+          </div>
+          <div className="kanban-column-monthbar">
+            <select value={installationMonth} onChange={(e) => setInstallationMonth(e.target.value)}>
+              {installationMonths.map((m) => (
+                <option key={m} value={m}>{monthLabel(m)}</option>
+              ))}
+            </select>
           </div>
           <div className="reminder-column-body">
-            {data.installationsProgrammees.length === 0 && <p className="muted">Aucune installation programmée.</p>}
-            {data.installationsProgrammees.map((lead) => (
+            {installationsDuMois.length === 0 && <p className="muted">Aucune installation programmée ce mois-ci.</p>}
+            {installationsDuMois.map((lead) => (
               <ReminderCard key={lead.id} lead={lead}>
                 <div className="reminder-card-date">
                   {lead.installationDate

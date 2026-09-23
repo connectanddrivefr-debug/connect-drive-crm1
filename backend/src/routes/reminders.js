@@ -12,19 +12,28 @@ router.use(requireAuth);
 
 // GET /api/reminders — même scoping par rôle que GET /api/leads: un
 // commercial ne voit que ses propres leads assignés, l'admin voit tout.
+//
+// Note importante: contrairement aux visites techniques, aux demandes de
+// rappel et aux photos (qui se passent avant la signature du devis),
+// l'installation est programmée APRÈS que le lead soit passé en statut
+// SIGNE. Il ne faut donc pas exclure les leads signés de cette catégorie,
+// sous peine de ne plus jamais voir les installations programmées
+// apparaître ici alors qu'elles sont bien visibles sur la carte du lead
+// dans le pipeline (colonne "Signé").
 router.get("/", async (req, res) => {
-  const where = { status: { notIn: ["SIGNE", "PERDU"] } };
+  const scope = {};
   if (req.user.role === "COMMERCIAL") {
-    where.assignedToId = req.user.id;
+    scope.assignedToId = req.user.id;
   }
 
   const leads = await prisma.lead.findMany({
     where: {
-      ...where,
+      ...scope,
+      status: { notIn: ["PERDU"] },
       OR: [
-        { technicalVisitStatus: { in: ["A_PROGRAMMER", "PROGRAMMEE"] } },
-        { callbackRequested: true },
-        { photosStatus: "EN_ATTENTE" },
+        { status: { notIn: ["SIGNE"] }, technicalVisitStatus: { in: ["A_PROGRAMMER", "PROGRAMMEE"] } },
+        { status: { notIn: ["SIGNE"] }, callbackRequested: true },
+        { status: { notIn: ["SIGNE"] }, photosStatus: "EN_ATTENTE" },
         { installationStatus: "PROGRAMMEE" },
       ],
     },
@@ -33,10 +42,10 @@ router.get("/", async (req, res) => {
   });
 
   res.json({
-    visitesProgrammees: leads.filter((l) => l.technicalVisitStatus === "PROGRAMMEE"),
-    visitesAProgrammer: leads.filter((l) => l.technicalVisitStatus === "A_PROGRAMMER"),
-    clientsARappeler: leads.filter((l) => l.callbackRequested),
-    photosEnAttente: leads.filter((l) => l.photosStatus === "EN_ATTENTE"),
+    visitesProgrammees: leads.filter((l) => l.status !== "SIGNE" && l.technicalVisitStatus === "PROGRAMMEE"),
+    visitesAProgrammer: leads.filter((l) => l.status !== "SIGNE" && l.technicalVisitStatus === "A_PROGRAMMER"),
+    clientsARappeler: leads.filter((l) => l.status !== "SIGNE" && l.callbackRequested),
+    photosEnAttente: leads.filter((l) => l.status !== "SIGNE" && l.photosStatus === "EN_ATTENTE"),
     installationsProgrammees: leads.filter((l) => l.installationStatus === "PROGRAMMEE"),
   });
 });
