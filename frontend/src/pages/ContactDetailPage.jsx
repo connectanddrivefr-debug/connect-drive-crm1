@@ -274,7 +274,10 @@ export default function ContactDetailPage() {
       const updated = kind === "deposit"
         ? await api.createDepositLink(id, parseFloat(amount))
         : await api.createBalanceLink(id, parseFloat(amount));
-      setLead(updated);
+      // La réponse de cette route n'inclut pas toutes les relations (quotes,
+      // statusHistory, etc.) utilisées ailleurs sur la page — on recharge le
+      // lead complet plutôt que d'écraser l'état avec un objet partiel.
+      await load();
       if (kind === "deposit") setDepositAmountInput(""); else setBalanceAmountInput("");
       const link = kind === "deposit" ? updated.depositPaymentLink : updated.balancePaymentLink;
       if (link && navigator.clipboard) {
