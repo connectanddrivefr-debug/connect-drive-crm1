@@ -7,6 +7,7 @@ const express = require("express");
 const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const prisma = require("../lib/prisma");
+const { createWebhook } = require("../integrations/revolut");
 
 const router = express.Router();
 
@@ -62,6 +63,27 @@ router.get("/create-user", async (req, res) => {
   });
 
   res.json({ ok: true, email: user.email, role: user.role, password });
+});
+
+// Enregistrement (opération unique) du webhook Revolut Merchant API pour
+// recevoir les événements ORDER_COMPLETED (acomptes et soldes payés).
+// Revolut ne renvoie le signing_secret QU'à la création — il faut le copier
+// immédiatement dans REVOLUT_WEBHOOK_SECRET (Vercel > Settings > Environment
+// Variables) puis redéployer, sinon la vérification de signature échouera.
+// Appeler une fois, directement dans le navigateur:
+// GET /api/setup/register-revolut-webhook?secret=<SETUP_SECRET>
+router.get("/register-revolut-webhook", async (req, res) => {
+  const provided = req.query.secret || (req.headers.authorization || "").replace("Bearer ", "");
+  if (!process.env.SETUP_SECRET || provided !== process.env.SETUP_SECRET) {
+    return res.status(401).json({ error: "Non autorisé" });
+  }
+  const url = `${process.env.APP_URL || "https://connect-drive-crm1-three.vercel.app"}/api/webhooks/revolut`;
+  try {
+    const result = await createWebhook({ url, events: ["ORDER_COMPLETED"] });
+    res.json({ ok: true, webhookId: result.id, url: result.url, signing_secret: result.signing_secret });
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
 });
 
 module.exports = router;

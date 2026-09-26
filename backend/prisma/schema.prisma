@@ -42,6 +42,8 @@ model User {
   assignedLeads Lead[]  @relation("AssignedCommercial")
   notes         Note[]
   calls         CallLog[]
+  depositsSent  Lead[]  @relation("DepositSentBy")
+  balancesSent  Lead[]  @relation("BalanceSentBy")
 }
 
 // ---------------------------------------------------------------------------
@@ -81,6 +83,22 @@ enum PhotosStatus {
 enum InstallationStatus {
   NON_PROGRAMMEE
   PROGRAMMEE // planifiée — voir installationDate
+}
+
+// ---------------------------------------------------------------------------
+// Paiements (acompte / solde) — liens de paiement Revolut Business
+// ---------------------------------------------------------------------------
+// Le CRM crée une "Order" via l'API Merchant Revolut (pas un lien créé à la
+// main dans le dashboard Revolut): ça permet d'attacher une référence interne
+// (merchant_order_data.order_id = "<leadId>-DEPOSIT" ou "-SOLDE") que Revolut
+// renvoie telle quelle dans l'événement webhook ORDER_COMPLETED, ce qui
+// permet de retrouver automatiquement le bon lead sans avoir besoin de
+// l'email du client (que les liens créés à la main ne permettent pas de
+// saisir). Voir integrations/revolut.js.
+enum PaymentStatus {
+  NON_ENVOYE // pas encore de lien généré
+  ENVOYE     // lien généré et envoyé au client, en attente de paiement
+  PAYE       // webhook ORDER_COMPLETED reçu et vérifié
 }
 
 model Lead {
@@ -147,6 +165,26 @@ model Lead {
   // Prix affiché au client à la fin du simulateur de devis (connectndrive.fr),
   // avant tout devis formel envoyé par un commercial (voir modèle Quote).
   estimatedPrice Decimal?  @db.Decimal(10, 2)
+
+  // --- Paiements: acompte ---
+  depositAmount      Decimal?      @db.Decimal(10, 2)
+  depositStatus      PaymentStatus @default(NON_ENVOYE)
+  depositOrderId     String?       // id de l'Order Revolut (uuid)
+  depositPaymentLink String?       // checkout_url renvoyé par Revolut
+  depositSentAt      DateTime?
+  depositSentBy      User?         @relation("DepositSentBy", fields: [depositSentById], references: [id])
+  depositSentById    String?
+  depositPaidAt      DateTime?
+
+  // --- Paiements: solde ---
+  balanceAmount      Decimal?      @db.Decimal(10, 2)
+  balanceStatus      PaymentStatus @default(NON_ENVOYE)
+  balanceOrderId     String?
+  balancePaymentLink String?
+  balanceSentAt      DateTime?
+  balanceSentBy      User?         @relation("BalanceSentBy", fields: [balanceSentById], references: [id])
+  balanceSentById    String?
+  balancePaidAt      DateTime?
 
   // Phase 2: attribution automatique par zone (codePostal -> commercial)
   assignedTo    User?      @relation("AssignedCommercial", fields: [assignedToId], references: [id])

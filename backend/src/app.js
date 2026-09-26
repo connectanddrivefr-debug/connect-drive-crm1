@@ -18,7 +18,17 @@ const userRoutes = require("./routes/users");
 const app = express();
 
 app.use(cors({ origin: process.env.FRONTEND_URL || "*" }));
-app.use(express.json());
+// Capture le corps brut (octets exacts reçus) pour la vérification de
+// signature des webhooks (Revolut notamment, qui signe le payload brut —
+// JSON.stringify(req.body) peut différer légèrement de l'original: ordre des
+// clés, espaces, échappements).
+app.use(
+  express.json({
+    verify: (req, res, buf) => {
+      req.rawBody = buf.toString("utf8");
+    },
+  })
+);
 
 app.get("/api/health", (req, res) => res.json({ ok: true }));
 

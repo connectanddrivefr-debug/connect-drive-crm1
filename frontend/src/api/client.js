@@ -47,6 +47,10 @@ export const api = {
   addNote: (id, content) => request(`/leads/${id}/notes`, { method: "POST", body: { content } }),
   addCall: (id, summary) => request(`/leads/${id}/calls`, { method: "POST", body: { summary } }),
 
+  // Liens de paiement Revolut (acompte / solde) — voir routes/leads.js.
+  createDepositLink: (id, amount) => request(`/leads/${id}/payments/deposit`, { method: "POST", body: { amount } }),
+  createBalanceLink: (id, amount) => request(`/leads/${id}/payments/balance`, { method: "POST", body: { amount } }),
+
   createQuote: (data) => request("/quotes", { method: "POST", body: data }),
   updateQuote: (id, data) => request(`/quotes/${id}`, { method: "PATCH", body: data }),
 

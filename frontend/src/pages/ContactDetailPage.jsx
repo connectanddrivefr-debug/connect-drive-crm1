@@ -110,6 +110,9 @@ export default function ContactDetailPage() {
   const [visitSlots, setVisitSlots] = useState("");
   const [visitDate, setVisitDate] = useState("");
   const [installationDate, setInstallationDate] = useState("");
+  const [depositAmountInput, setDepositAmountInput] = useState("");
+  const [balanceAmountInput, setBalanceAmountInput] = useState("");
+  const [paymentLoading, setPaymentLoading] = useState(null); // "deposit" | "balance" | null
 
   async function load() {
     const data = await api.getLead(id);
@@ -258,6 +261,34 @@ export default function ContactDetailPage() {
     await api.createQuote({ leadId: id, product: quoteForm.product, amount: parseFloat(quoteForm.amount) });
     setQuoteForm({ product: "V2C_TRYDAN", amount: "" });
     load();
+  }
+
+  // Génère (ou régénère) le lien de paiement Revolut pour l'acompte ou le
+  // solde et copie automatiquement le lien dans le presse-papiers pour que
+  // l'utilisateur puisse l'envoyer directement au client.
+  async function generatePaymentLink(kind) {
+    const amount = kind === "deposit" ? depositAmountInput : balanceAmountInput;
+    if (!amount || Number(amount) <= 0) return;
+    setPaymentLoading(kind);
+    try {
+      const updated = kind === "deposit"
+        ? await api.createDepositLink(id, parseFloat(amount))
+        : await api.createBalanceLink(id, parseFloat(amount));
+      setLead(updated);
+      if (kind === "deposit") setDepositAmountInput(""); else setBalanceAmountInput("");
+      const link = kind === "deposit" ? updated.depositPaymentLink : updated.balancePaymentLink;
+      if (link && navigator.clipboard) {
+        navigator.clipboard.writeText(link).catch(() => {});
+      }
+    } catch (err) {
+      alert(`Erreur: ${err.message}`);
+    } finally {
+      setPaymentLoading(null);
+    }
+  }
+
+  function copyLink(link) {
+    if (link && navigator.clipboard) navigator.clipboard.writeText(link).catch(() => {});
   }
 
   return (
@@ -550,6 +581,83 @@ export default function ContactDetailPage() {
             />
             <button type="submit" className="btn-primary">Envoyer devis</button>
           </form>
+        </section>
+
+        <section className="card">
+          <h3>Paiements</h3>
+          <div className="payment-row">
+            <div className="payment-row-header">
+              <span>Acompte</span>
+              <span className={`badge badge-payment-${lead.depositStatus.toLowerCase()}`}>
+                {lead.depositStatus === "PAYE" ? "Payé" : lead.depositStatus === "ENVOYE" ? "Envoyé" : "Non envoyé"}
+              </span>
+            </div>
+            {lead.depositAmount != null && (
+              <div className="payment-row-meta">
+                {Number(lead.depositAmount).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+                {lead.depositSentAt && ` — envoyé le ${new Date(lead.depositSentAt).toLocaleDateString("fr-FR")}`}
+                {lead.depositSentBy && ` par ${lead.depositSentBy.firstName}`}
+                {lead.depositPaidAt && ` — payé le ${new Date(lead.depositPaidAt).toLocaleDateString("fr-FR")}`}
+              </div>
+            )}
+            {lead.depositPaymentLink && (
+              <div className="payment-row-link">
+                <a href={lead.depositPaymentLink} target="_blank" rel="noreferrer">{lead.depositPaymentLink}</a>
+                <button type="button" className="btn-ghost" onClick={() => copyLink(lead.depositPaymentLink)}>Copier</button>
+              </div>
+            )}
+            <div className="inline-form">
+              <input
+                type="number" step="0.01" placeholder="Montant acompte €"
+                value={depositAmountInput}
+                onChange={(e) => setDepositAmountInput(e.target.value)}
+              />
+              <button
+                type="button" className="btn-primary"
+                disabled={paymentLoading === "deposit"}
+                onClick={() => generatePaymentLink("deposit")}
+              >
+                {lead.depositPaymentLink ? "Régénérer le lien" : "Générer le lien"}
+              </button>
+            </div>
+          </div>
+
+          <div className="payment-row">
+            <div className="payment-row-header">
+              <span>Solde</span>
+              <span className={`badge badge-payment-${lead.balanceStatus.toLowerCase()}`}>
+                {lead.balanceStatus === "PAYE" ? "Payé" : lead.balanceStatus === "ENVOYE" ? "Envoyé" : "Non envoyé"}
+              </span>
+            </div>
+            {lead.balanceAmount != null && (
+              <div className="payment-row-meta">
+                {Number(lead.balanceAmount).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+                {lead.balanceSentAt && ` — envoyé le ${new Date(lead.balanceSentAt).toLocaleDateString("fr-FR")}`}
+                {lead.balanceSentBy && ` par ${lead.balanceSentBy.firstName}`}
+                {lead.balancePaidAt && ` — payé le ${new Date(lead.balancePaidAt).toLocaleDateString("fr-FR")}`}
+              </div>
+            )}
+            {lead.balancePaymentLink && (
+              <div className="payment-row-link">
+                <a href={lead.balancePaymentLink} target="_blank" rel="noreferrer">{lead.balancePaymentLink}</a>
+                <button type="button" className="btn-ghost" onClick={() => copyLink(lead.balancePaymentLink)}>Copier</button>
+              </div>
+            )}
+            <div className="inline-form">
+              <input
+                type="number" step="0.01" placeholder="Montant solde €"
+                value={balanceAmountInput}
+                onChange={(e) => setBalanceAmountInput(e.target.value)}
+              />
+              <button
+                type="button" className="btn-primary"
+                disabled={paymentLoading === "balance"}
+                onClick={() => generatePaymentLink("balance")}
+              >
+                {lead.balancePaymentLink ? "Régénérer le lien" : "Générer le lien"}
+              </button>
+            </div>
+          </div>
         </section>
 
         <section className="card">

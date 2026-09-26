@@ -4,6 +4,7 @@ const crypto = require("crypto");
 const prisma = require("../lib/prisma");
 const { sendLeadConfirmation, sendInternalNewLeadNotif } = require("../integrations/brevo");
 const { sendMetaConversionEvent } = require("../integrations/metaConversions");
+const { verifyWebhookSignature } = require("../integrations/revolut");
 
 const router = express.Router();
 
@@ -462,6 +463,62 @@ router.post("/simulateur/prix", async (req, res) => {
     console.error("[Simulateur webhook] erreur maj prix:", err.message);
     res.status(500).json({ error: "Erreur serveur" });
   }
+});
+
+// ---------------------------------------------------------------------------
+// Revolut Business (Merchant API) — confirmation automatique des paiements
+// d'acompte et de solde. Voir integrations/revolut.js pour le détail de la
+// vérification de signature et scripts/registerRevolutWebhook.js pour
+// l'enregistrement (opération unique) de ce endpoint auprès de Revolut.
+// ---------------------------------------------------------------------------
+router.post("/revolut", async (req, res) => {
+  const timestampHeader = req.headers["revolut-request-timestamp"];
+  const signatureHeader = req.headers["revolut-signature"];
+
+  const valid = verifyWebhookSignature({
+    rawBody: req.rawBody || JSON.stringify(req.body),
+    timestampHeader,
+    signatureHeader,
+  });
+
+  if (!valid) {
+    console.warn("[Revolut webhook] signature invalide — requête refusée");
+    return res.status(401).json({ error: "Signature invalide" });
+  }
+
+  // Toujours répondre vite (Revolut retente 3 fois en cas d'échec/timeout) —
+  // les erreurs de traitement sont journalisées mais ne remontent pas au
+  // client Revolut pour éviter des retentatives inutiles sur nos propres bugs.
+  try {
+    const { event, merchant_order_ext_ref: ref } = req.body || {};
+
+    if (event === "ORDER_COMPLETED" && ref) {
+      const match = /^(.+)-(DEPOSIT|SOLDE)$/.exec(ref);
+      if (!match) {
+        console.warn("[Revolut webhook] référence non reconnue:", ref);
+      } else {
+        const [, leadId, kind] = match;
+        const lead = await prisma.lead.findUnique({ where: { id: leadId } });
+        if (!lead) {
+          console.warn("[Revolut webhook] lead introuvable pour la référence:", ref);
+        } else if (kind === "DEPOSIT") {
+          await prisma.lead.update({
+            where: { id: leadId },
+            data: { depositStatus: "PAYE", depositPaidAt: new Date() },
+          });
+        } else {
+          await prisma.lead.update({
+            where: { id: leadId },
+            data: { balanceStatus: "PAYE", balancePaidAt: new Date() },
+          });
+        }
+      }
+    }
+  } catch (err) {
+    console.error("[Revolut webhook] erreur de traitement:", err.message);
+  }
+
+  res.sendStatus(200);
 });
 
 module.exports = router;

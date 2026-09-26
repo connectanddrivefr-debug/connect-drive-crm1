@@ -279,6 +279,8 @@ export default function KanbanPage() {
                         {lead.callbackRequested && <span className="badge badge-rappel">À rappeler</span>}
                         {lead.photosStatus === "EN_ATTENTE" && <span className="badge badge-rappel">Photos</span>}
                         {lead.installationStatus === "PROGRAMMEE" && <span className="badge badge-rappel">Install. prog.</span>}
+                        {lead.depositStatus === "PAYE" && <span className="badge badge-payment-paye">Acompte payé</span>}
+                        {lead.balanceStatus === "PAYE" && <span className="badge badge-payment-paye">Solde payé</span>}
                       </div>
                       {lead.estimatedPrice != null && (
                         <span className="lead-card-price">{Number(lead.estimatedPrice).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span>

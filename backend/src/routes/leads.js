@@ -6,6 +6,7 @@ const {
   sendInternalNewLeadNotif,
 } = require("../integrations/brevo");
 const { sendMetaConversionEvent } = require("../integrations/metaConversions");
+const { createPaymentOrder } = require("../integrations/revolut");
 
 const router = express.Router();
 router.use(requireAuth);
@@ -363,6 +364,81 @@ router.post("/:id/calls", async (req, res) => {
     },
   });
   res.status(201).json(call);
+});
+
+// ---------------------------------------------------------------------------
+// Paiements (acompte / solde) — création de lien de paiement Revolut
+// ---------------------------------------------------------------------------
+// Crée (ou recrée) le lien de paiement d'acompte ou de solde pour un lead, et
+// l'enregistre sur le lead pour traçabilité (qui l'a envoyé, quand, montant).
+// Le rapprochement automatique du paiement se fait via le webhook Revolut
+// (voir routes/webhooks.js) grâce à la référence interne posée à la création
+// de l'Order — pas besoin de l'email du client.
+async function createLeadPaymentLink(req, res, kind) {
+  const { amount } = req.body;
+  const amountNum = Number(amount);
+  if (!Number.isFinite(amountNum) || amountNum <= 0) {
+    return res.status(400).json({ error: "Montant invalide" });
+  }
+
+  const lead = await prisma.lead.findUnique({ where: { id: req.params.id } });
+  if (!lead) return res.status(404).json({ error: "Lead introuvable" });
+
+  const isDeposit = kind === "deposit";
+  const reference = `${lead.id}-${isDeposit ? "DEPOSIT" : "SOLDE"}`;
+  const clientName = `${lead.firstName || ""} ${lead.lastName || ""}`.trim() || undefined;
+
+  let order;
+  try {
+    order = await createPaymentOrder({
+      amount: amountNum,
+      reference,
+      description: `Connect & Drive — ${isDeposit ? "Acompte" : "Solde"} — ${clientName || lead.email}`,
+      customerEmail: lead.email,
+      customerName: clientName,
+    });
+  } catch (err) {
+    console.error("[Revolut] échec création lien de paiement:", err.message);
+    return res.status(502).json({ error: "Échec de la création du lien de paiement Revolut" });
+  }
+
+  const data = isDeposit
+    ? {
+        depositAmount: amountNum,
+        depositStatus: "ENVOYE",
+        depositOrderId: order.orderId,
+        depositPaymentLink: order.checkoutUrl,
+        depositSentAt: new Date(),
+        depositSentById: req.user?.id,
+        depositPaidAt: null,
+      }
+    : {
+        balanceAmount: amountNum,
+        balanceStatus: "ENVOYE",
+        balanceOrderId: order.orderId,
+        balancePaymentLink: order.checkoutUrl,
+        balanceSentAt: new Date(),
+        balanceSentById: req.user?.id,
+        balancePaidAt: null,
+      };
+
+  const updated = await prisma.lead.update({
+    where: { id: lead.id },
+    data,
+    include: { assignedTo: true, depositSentBy: true, balanceSentBy: true },
+  });
+
+  res.status(201).json(updated);
+}
+
+// POST /api/leads/:id/payments/deposit  { amount }
+router.post("/:id/payments/deposit", async (req, res) => {
+  await createLeadPaymentLink(req, res, "deposit");
+});
+
+// POST /api/leads/:id/payments/balance  { amount }
+router.post("/:id/payments/balance", async (req, res) => {
+  await createLeadPaymentLink(req, res, "balance");
 });
 
 module.exports = router;
