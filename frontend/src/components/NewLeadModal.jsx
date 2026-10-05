@@ -11,7 +11,7 @@ export default function NewLeadModal({ onClose, onCreated }) {
   const [form, setForm] = useState({
     firstName: "", lastName: "", email: "", phone: "",
     address: "", postalCode: "", city: "",
-    sourceDetail: "", isProfessional: false,
+    sourceDetail: "", isProfessional: false, company: "",
     notesText: "", assignedToId: "",
   });
   const [error, setError] = useState("");
@@ -95,6 +95,17 @@ export default function NewLeadModal({ onClose, onCreated }) {
           />
           Client professionnel (pro)
         </label>
+
+        {form.isProfessional && (
+          <>
+            <label>Entreprise</label>
+            <input
+              placeholder="Nom de l'entreprise"
+              value={form.company}
+              onChange={(e) => update("company", e.target.value)}
+            />
+          </>
+        )}
 
         {users && users.length > 0 && (
           <>

@@ -265,6 +265,7 @@ export default function KanbanPage() {
                         {lead.firstName || ""} {lead.lastName || ""}
                         {!lead.firstName && !lead.lastName && lead.email}
                       </div>
+                      {lead.company && <div className="lead-card-meta"><strong>{lead.company}</strong></div>}
                       <div className="lead-card-meta">{lead.email}</div>
                       <div className="lead-card-meta">{lead.postalCode || ""} {lead.city || ""}</div>
                       {isSigneCol && lead.signedAt && (

@@ -106,7 +106,7 @@ export default function ContactDetailPage() {
   const [editingAddress, setEditingAddress] = useState(false);
   const [addressForm, setAddressForm] = useState({ address: "", postalCode: "", city: "" });
   const [editingOrigin, setEditingOrigin] = useState(false);
-  const [originForm, setOriginForm] = useState({ sourceDetail: "", isProfessional: false });
+  const [originForm, setOriginForm] = useState({ sourceDetail: "", isProfessional: false, company: "" });
   const [visitSlots, setVisitSlots] = useState("");
   const [visitDate, setVisitDate] = useState("");
   const [installationDate, setInstallationDate] = useState("");
@@ -218,6 +218,7 @@ export default function ContactDetailPage() {
     setOriginForm({
       sourceDetail: lead.sourceDetail || "",
       isProfessional: Boolean(lead.isProfessional),
+      company: lead.company || "",
     });
     setEditingOrigin(true);
   }
@@ -227,6 +228,7 @@ export default function ContactDetailPage() {
     await api.updateLead(id, {
       sourceDetail: originForm.sourceDetail.trim() || null,
       isProfessional: originForm.isProfessional,
+      company: originForm.isProfessional ? originForm.company.trim() || null : null,
     });
     setEditingOrigin(false);
     load();
@@ -418,6 +420,12 @@ export default function ContactDetailPage() {
                   <span className="info-label">Type de client</span>
                   <span className="info-value">{lead.isProfessional ? "Professionnel" : "Particulier"}</span>
                 </div>
+                {lead.isProfessional && (
+                  <div className="info-field">
+                    <span className="info-label">Entreprise</span>
+                    <span className="info-value">{lead.company || "—"}</span>
+                  </div>
+                )}
                 <button type="button" className="btn-link" onClick={startEditOrigin}>
                   Modifier la provenance / le type de client
                 </button>
@@ -445,6 +453,16 @@ export default function ContactDetailPage() {
                   />
                   Client professionnel (pro)
                 </label>
+                {originForm.isProfessional && (
+                  <label>
+                    Entreprise
+                    <input
+                      placeholder="Nom de l'entreprise"
+                      value={originForm.company}
+                      onChange={(e) => setOriginForm((f) => ({ ...f, company: e.target.value }))}
+                    />
+                  </label>
+                )}
                 <div className="inline-form-actions">
                   <button type="submit" className="btn-primary">Enregistrer</button>
                   <button type="button" className="btn-ghost" onClick={() => setEditingOrigin(false)}>Annuler</button>

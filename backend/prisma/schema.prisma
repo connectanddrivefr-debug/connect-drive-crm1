@@ -141,6 +141,8 @@ model Lead {
   // Client professionnel (entreprise) plutôt que particulier — affiché
   // comme étiquette "Pro" sur la carte et la fiche du lead.
   isProfessional Boolean   @default(false)
+  // Nom de l'entreprise (clients pro) — affiché sur la carte et la fiche.
+  company        String?
 
   // --- Section "Rappels" ---
   technicalVisitStatus TechnicalVisitStatus @default(NON_PROGRAMMEE)

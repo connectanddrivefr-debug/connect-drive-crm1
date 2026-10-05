@@ -144,7 +144,10 @@ router.post("/", async (req, res) => {
   const {
     firstName, lastName, email, phone,
     address, postalCode, city,
-    source = "MANUEL", sourceDetail, isProfessional, notesText, assignedToId,
+    source = "MANUEL", sourceDetail, isProfessional, company, notesText, assignedToId,
+    // Import de leads déjà reçus ailleurs: date d'origine, et pas d'email
+    // automatique au client (il a déjà été contacté).
+    createdAt, skipNotifications,
   } = req.body;
 
   if (!email) return res.status(400).json({ error: "Email requis" });
@@ -154,6 +157,8 @@ router.post("/", async (req, res) => {
       firstName, lastName, email, phone,
       address, postalCode, city,
       source, sourceDetail: sourceDetail || null, isProfessional: Boolean(isProfessional),
+      company: company || null,
+      ...(createdAt ? { createdAt: new Date(createdAt) } : {}),
       notesText, assignedToId,
       status: "NOUVEAU",
       statusHistory: {
@@ -166,17 +171,19 @@ router.post("/", async (req, res) => {
   // Automatisations Brevo déclenchées à la création (§5 cahier des charges)
   // Si un commercial est assigné, l'email de confirmation est personnalisé
   // à son nom (voir integrations/brevo.js).
-  try {
-    await sendLeadConfirmation(lead, lead.assignedTo);
-    await sendInternalNewLeadNotif(lead, lead.assignedTo);
-  } catch (err) {
-    console.error("[Brevo] échec envoi email création lead:", err.message);
-  }
+  if (!skipNotifications) {
+    try {
+      await sendLeadConfirmation(lead, lead.assignedTo);
+      await sendInternalNewLeadNotif(lead, lead.assignedTo);
+    } catch (err) {
+      console.error("[Brevo] échec envoi email création lead:", err.message);
+    }
 
-  try {
-    await sendMetaConversionEvent("Lead", lead);
-  } catch (err) {
-    console.error("[MetaCAPI] échec envoi événement création lead:", err.message);
+    try {
+      await sendMetaConversionEvent("Lead", lead);
+    } catch (err) {
+      console.error("[MetaCAPI] échec envoi événement création lead:", err.message);
+    }
   }
 
   res.status(201).json(lead);
@@ -186,7 +193,7 @@ router.post("/", async (req, res) => {
 router.patch("/:id", async (req, res) => {
   const {
     firstName, lastName, email, phone, address, postalCode, city,
-    sourceDetail, isProfessional, notesText, assignedToId,
+    sourceDetail, isProfessional, company, notesText, assignedToId,
     technicalVisitStatus, technicalVisitDate, technicalVisitSlots,
     callbackRequested, photosStatus,
     installationStatus, installationDate,
@@ -264,6 +271,7 @@ router.patch("/:id", async (req, res) => {
       firstName, lastName, email, phone, address, postalCode, city,
       ...(sourceDetail !== undefined ? { sourceDetail: sourceDetail || null } : {}),
       ...(isProfessional !== undefined ? { isProfessional: Boolean(isProfessional) } : {}),
+      ...(company !== undefined ? { company: company || null } : {}),
       notesText, assignedToId,
       ...rappelData,
     },
