@@ -38,7 +38,7 @@ async function createPaymentOrder({ amount, reference, description, customerEmai
     amount: amountMinorUnits,
     currency: "EUR",
     description,
-    merchant_order_data: { order_id: reference, description },
+    merchant_order_data: { order_id: reference, reference, description },
   };
   if (customerEmail || customerName) {
     body.customer = {

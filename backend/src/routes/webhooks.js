@@ -490,28 +490,42 @@ router.post("/revolut", async (req, res) => {
   // les erreurs de traitement sont journalisées mais ne remontent pas au
   // client Revolut pour éviter des retentatives inutiles sur nos propres bugs.
   try {
-    const { event, merchant_order_ext_ref: ref } = req.body || {};
+    const body = req.body || {};
+    const { event, order_id: revolutOrderId, merchant_order_ext_ref: ref } = body;
+    console.log("[Revolut webhook] événement reçu:", JSON.stringify(body));
 
-    if (event === "ORDER_COMPLETED" && ref) {
-      const match = /^(.+)-(DEPOSIT|SOLDE)$/.exec(ref);
-      if (!match) {
-        console.warn("[Revolut webhook] référence non reconnue:", ref);
-      } else {
-        const [, leadId, kind] = match;
-        const lead = await prisma.lead.findUnique({ where: { id: leadId } });
-        if (!lead) {
-          console.warn("[Revolut webhook] lead introuvable pour la référence:", ref);
-        } else if (kind === "DEPOSIT") {
-          await prisma.lead.update({
-            where: { id: leadId },
-            data: { depositStatus: "PAYE", depositPaidAt: new Date() },
-          });
-        } else {
-          await prisma.lead.update({
-            where: { id: leadId },
-            data: { balanceStatus: "PAYE", balancePaidAt: new Date() },
-          });
+    if (event === "ORDER_COMPLETED") {
+      let leadId = null;
+      let kind = null;
+
+      // 1) Rapprochement principal: id de l'Order Revolut stocké à la création du lien
+      if (revolutOrderId) {
+        const byDeposit = await prisma.lead.findFirst({ where: { depositOrderId: revolutOrderId } });
+        if (byDeposit) { leadId = byDeposit.id; kind = "DEPOSIT"; }
+        else {
+          const byBalance = await prisma.lead.findFirst({ where: { balanceOrderId: revolutOrderId } });
+          if (byBalance) { leadId = byBalance.id; kind = "SOLDE"; }
         }
+      }
+
+      // 2) Secours: référence interne "<leadId>-DEPOSIT" / "-SOLDE"
+      if (!leadId && ref) {
+        const match = /^(.+)-(DEPOSIT|SOLDE)$/.exec(ref);
+        if (match) { leadId = match[1]; kind = match[2]; }
+      }
+
+      if (!leadId) {
+        console.warn("[Revolut webhook] aucun lead trouvé (order_id / ref):", revolutOrderId, ref);
+      } else if (kind === "DEPOSIT") {
+        await prisma.lead.update({
+          where: { id: leadId },
+          data: { depositStatus: "PAYE", depositPaidAt: new Date() },
+        });
+      } else {
+        await prisma.lead.update({
+          where: { id: leadId },
+          data: { balanceStatus: "PAYE", balancePaidAt: new Date() },
+        });
       }
     }
   } catch (err) {
