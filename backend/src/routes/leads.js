@@ -319,6 +319,10 @@ router.patch("/:id/status", async (req, res) => {
       // si le lead en ressort (ex: erreur, réouverture du dossier).
       ...(status === "SIGNE" && current.status !== "SIGNE" ? { signedAt: new Date() } : {}),
       ...(status !== "SIGNE" && current.status === "SIGNE" ? { signedAt: null } : {}),
+      // (Re)démarre la séquence de relance devis à l'entrée en DEVIS_ENVOYE.
+      ...(status === "DEVIS_ENVOYE" && current.status !== "DEVIS_ENVOYE"
+        ? { quoteFollowupStartedAt: new Date(), quoteFollowupStep: 0, quoteFollowupLastAt: null }
+        : {}),
       statusHistory: {
         create: {
           fromStatus: current.status,

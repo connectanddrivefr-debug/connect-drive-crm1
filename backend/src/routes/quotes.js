@@ -21,6 +21,10 @@ router.post("/", async (req, res) => {
     where: { id: leadId },
     data: {
       status: "DEVIS_ENVOYE",
+      // Nouveau devis envoyé -> la séquence de relance repart de zéro.
+      quoteFollowupStartedAt: new Date(),
+      quoteFollowupStep: 0,
+      quoteFollowupLastAt: null,
       statusHistory: {
         create: {
           toStatus: "DEVIS_ENVOYE",

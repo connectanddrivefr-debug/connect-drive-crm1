@@ -164,6 +164,14 @@ model Lead {
   // Empêche de renvoyer plusieurs fois le rappel J-2 pour la même date d'installation.
   installationReminderSentAt DateTime?
 
+  // --- Séquence de relance devis (jobs/quoteReminders.js) ---
+  // 5 relances client automatiques tant que le lead reste en DEVIS_ENVOYE:
+  // J+1 (9h), +2 j, +3 j, +3 j, +4 j. Remise à zéro à chaque (re)passage en
+  // DEVIS_ENVOYE; s'arrête d'elle-même dès que le lead change de statut.
+  quoteFollowupStartedAt DateTime?
+  quoteFollowupStep      Int       @default(0)
+  quoteFollowupLastAt    DateTime?
+
   // Prix affiché au client à la fin du simulateur de devis (connectndrive.fr),
   // avant tout devis formel envoyé par un commercial (voir modèle Quote).
   estimatedPrice Decimal?  @db.Decimal(10, 2)
