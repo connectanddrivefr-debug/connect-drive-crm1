@@ -442,3 +442,9 @@ main { padding: 24px; max-width: 1400px; margin: 0 auto; }
   border-radius: var(--radius-sm); color: #166534; font-size: 14px; display: flex; flex-direction: column; gap: 4px;
 }
 .created-user .mono { color: var(--text); user-select: all; }
+
+.tech-manage { display: flex; align-items: center; gap: 10px; }
+.tech-kraaft-input { width: 240px; max-width: 46vw; padding: 5px 7px; border: 1px solid var(--border); border-radius: 5px; font-size: 12px; }
+.tech-nokraaft { margin: 0 0 0 6px; font-size: 10px; }
+.tech-form { grid-template-columns: 1fr 1fr 1fr 1.4fr auto; }
+@media (max-width: 760px) { .tech-form { grid-template-columns: 1fr 1fr; } }

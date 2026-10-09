@@ -14,7 +14,7 @@ export default function StockPage() {
   const [openId, setOpenId] = useState(null);
   const [techs, setTechs] = useState([]);
   const [showTechs, setShowTechs] = useState(false);
-  const [newTech, setNewTech] = useState({ firstName: "", lastName: "", phone: "" });
+  const [newTech, setNewTech] = useState({ firstName: "", lastName: "", phone: "", kraaftUserId: "" });
   const [error, setError] = useState("");
   const isAdmin = getCurrentUser()?.role === "ADMIN";
   const [stockUsers, setStockUsers] = useState([]);
@@ -72,7 +72,18 @@ export default function StockPage() {
     if (!newTech.firstName.trim()) return;
     try {
       await api.createTechnician(newTech);
-      setNewTech({ firstName: "", lastName: "", phone: "" });
+      setNewTech({ firstName: "", lastName: "", phone: "", kraaftUserId: "" });
+      await loadSummary();
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  async function saveKraaftId(t, value) {
+    const v = value.trim();
+    if (v === (t.kraaftUserId || "")) return;
+    try {
+      await api.updateTechnician(t.id, { kraaftUserId: v });
       await loadSummary();
     } catch (err) {
       setError(err.message);
@@ -223,9 +234,19 @@ export default function StockPage() {
               <span>
                 {techName(t)}
                 {t.phone && <span className="muted"> · {t.phone}</span>}
+                {!t.kraaftUserId && t.active && <span className="badge badge-rappel tech-nokraaft">sans ID Kraaft</span>}
               </span>
               {showTechs ? (
-                <button className="btn-link" onClick={() => toggleTech(t)}>{t.active ? "Désactiver" : "Réactiver"}</button>
+                <span className="tech-manage">
+                  <input
+                    className="mono tech-kraaft-input"
+                    defaultValue={t.kraaftUserId || ""}
+                    placeholder="ID Kraaft"
+                    title="Identifiant de l'utilisateur dans Kraaft (pour l'ajout automatique aux conversations de chantier)"
+                    onBlur={(e) => saveKraaftId(t, e.target.value)}
+                  />
+                  <button className="btn-link" onClick={() => toggleTech(t)}>{t.active ? "Désactiver" : "Réactiver"}</button>
+                </span>
               ) : (
                 <span className="muted">{t._count.chargers} borne(s)</span>
               )}
@@ -236,6 +257,7 @@ export default function StockPage() {
               <input placeholder="Prénom *" value={newTech.firstName} onChange={(e) => setNewTech({ ...newTech, firstName: e.target.value })} />
               <input placeholder="Nom" value={newTech.lastName} onChange={(e) => setNewTech({ ...newTech, lastName: e.target.value })} />
               <input placeholder="Téléphone" value={newTech.phone} onChange={(e) => setNewTech({ ...newTech, phone: e.target.value })} />
+              <input placeholder="ID Kraaft" value={newTech.kraaftUserId} onChange={(e) => setNewTech({ ...newTech, kraaftUserId: e.target.value })} />
               <button className="btn-primary" type="submit">Ajouter</button>
             </form>
           )}
