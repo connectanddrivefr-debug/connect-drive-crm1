@@ -27,8 +27,8 @@ router.post("/", requireRole("ADMIN"), async (req, res) => {
   if (!email || !firstName || !lastName) {
     return res.status(400).json({ error: "email, firstName et lastName sont requis" });
   }
-  if (!["ADMIN", "COMMERCIAL", "TECHNICIEN"].includes(role)) {
-    return res.status(400).json({ error: "role invalide (ADMIN, COMMERCIAL ou TECHNICIEN)" });
+  if (!["ADMIN", "COMMERCIAL", "TECHNICIEN", "LOGISTIQUE"].includes(role)) {
+    return res.status(400).json({ error: "role invalide (ADMIN, COMMERCIAL, TECHNICIEN ou LOGISTIQUE)" });
   }
 
   const existing = await prisma.user.findUnique({ where: { email } });

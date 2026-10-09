@@ -1,6 +1,6 @@
 import { Suspense, lazy } from "react";
 import { Routes, Route, Navigate, Link, useNavigate } from "react-router-dom";
-import { getToken } from "./api/client";
+import { getToken, getCurrentUser } from "./api/client";
 
 // Chaque page dans son propre chunk: évite de charger tout le CRM en un
 // seul gros bundle JS au premier écran (temps de chargement initial réduit).
@@ -16,29 +16,36 @@ function PageFallback() {
   return <p className="muted">Chargement…</p>;
 }
 
-function RequireAuth({ children }) {
+// Compte LOGISTIQUE (Fatima): uniquement l'onglet Stock.
+// Onglet Stock: uniquement ADMIN (Julien) et LOGISTIQUE.
+function RequireAuth({ children, stock = false }) {
   if (!getToken()) return <Navigate to="/login" replace />;
+  const role = getCurrentUser()?.role;
+  if (stock && role !== "ADMIN" && role !== "LOGISTIQUE") return <Navigate to="/" replace />;
+  if (!stock && role === "LOGISTIQUE") return <Navigate to="/stock" replace />;
   return children;
 }
 
 function Layout({ children }) {
   const navigate = useNavigate();
+  const role = getCurrentUser()?.role;
   const logout = () => {
     localStorage.removeItem("cdcrm_token");
+    localStorage.removeItem("cdcrm_user");
     navigate("/login");
   };
 
   return (
     <div className="app-shell">
       <header className="topbar">
-        <Link to="/" className="brand">
+        <Link to={role === "LOGISTIQUE" ? "/stock" : "/"} className="brand">
           <img src="/logo.png" alt="Connect & Drive" className="brand-logo" />
         </Link>
         <nav>
-          <Link to="/">Pipeline</Link>
-          <Link to="/rappels">Rappels</Link>
-          <Link to="/stock">Stock</Link>
-          <Link to="/dashboard">Tableau de bord</Link>
+          {role !== "LOGISTIQUE" && <Link to="/">Pipeline</Link>}
+          {role !== "LOGISTIQUE" && <Link to="/rappels">Rappels</Link>}
+          {(role === "ADMIN" || role === "LOGISTIQUE") && <Link to="/stock">Stock</Link>}
+          {role !== "LOGISTIQUE" && <Link to="/dashboard">Tableau de bord</Link>}
         </nav>
         {getToken() && (
           <button className="btn-ghost" onClick={logout}>
@@ -99,7 +106,7 @@ export default function App() {
         <Route
           path="/stock"
           element={
-            <RequireAuth>
+            <RequireAuth stock>
               <Layout>
                 <StockPage />
               </Layout>
@@ -111,7 +118,7 @@ export default function App() {
             key={mode}
             path={`/stock/${mode}`}
             element={
-              <RequireAuth>
+              <RequireAuth stock>
                 <Layout>
                   <StockScanPage key={mode} mode={mode} />
                 </Layout>

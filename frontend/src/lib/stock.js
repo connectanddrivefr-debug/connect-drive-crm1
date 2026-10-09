@@ -2,7 +2,7 @@
 export const SUPPLIERS = ["V2C", "Smappee", "Teltonika", "Tesla", "Autre"];
 
 export const MODELS_BY_SUPPLIER = {
-  V2C: ["V2C Trydan", "V2C Trydan Pro", "V2C Freedom Pro"],
+  V2C: ["V2C Trydan", "V2C Trydan 7,4 kW câble 5 m (TRY32-1-OL5-F)", "V2C Trydan Pro", "V2C Freedom Pro"],
   Smappee: ["Smappee EV Wall", "Smappee EV One"],
   Teltonika: ["Teltonika TeltoCharge"],
   Tesla: ["Tesla Wall Connector"],
@@ -10,6 +10,15 @@ export const MODELS_BY_SUPPLIER = {
 };
 
 export const ALL_MODELS = Object.values(MODELS_BY_SUPPLIER).flat();
+
+// Codes-barres produit (EAN) imprimés sur les étiquettes des cartons: ils
+// identifient la RÉFÉRENCE (identique sur tous les cartons du même modèle),
+// pas la borne. Scanné pendant une réception, un EAN connu sélectionne
+// automatiquement le modèle; seul le S/N est enregistré comme numéro de série.
+// À compléter au fil des nouvelles références reçues.
+export const EAN_MODELS = {
+  "3770038367006": "V2C Trydan 7,4 kW câble 5 m (TRY32-1-OL5-F)",
+};
 
 export const STATUS_LABELS = {
   EN_STOCK: "Au dépôt",
@@ -34,7 +43,7 @@ export function techName(t) {
 
 export function leadLabel(l) {
   if (!l) return "";
-  const name = `${l.firstName || ""} ${l.lastName || ""}`.trim() || l.email;
+  const name = `${l.firstName || ""} ${l.lastName || ""}`.trim() || "Client";
   return [l.company, name, l.city].filter(Boolean).join(" — ");
 }
 

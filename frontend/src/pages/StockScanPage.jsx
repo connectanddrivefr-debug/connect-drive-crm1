@@ -10,6 +10,7 @@ import {
   techName,
   leadLabel,
   looksLikeProductCode,
+  EAN_MODELS,
 } from "../lib/stock";
 
 // Écran de scan (pensé pour le téléphone) — 3 modes:
@@ -80,6 +81,24 @@ export default function StockScanPage({ mode }) {
   }
 
   async function handleScan(serial) {
+    // Code-barres produit (EAN) = référence du modèle, pas un numéro de série
+    if (looksLikeProductCode(serial)) {
+      const known = EAN_MODELS[serial];
+      if (mode === "reception" && known) {
+        setModel(known);
+        modelRef.current = known;
+        beep(true);
+        setFlash({ serial, level: "ok", message: `Modèle sélectionné : ${known}. Scannez maintenant le S/N.` });
+      } else {
+        beep(false);
+        setFlash({
+          serial,
+          level: "warn",
+          message: "Code-barres produit (référence), pas le numéro de série : scannez le QR code ou le code-barres « S/N ».",
+        });
+      }
+      return;
+    }
     if (itemsRef.current.some((it) => it.serial === serial)) {
       beep(false);
       setFlash({ serial, level: "error", message: "Déjà scannée" });
@@ -90,10 +109,6 @@ export default function StockScanPage({ mode }) {
     try {
       const { charger } = await api.lookupSerial(serial);
       const ev = evaluate(mode, charger, techRef.current);
-      if (mode === "reception" && ev.level === "ok" && looksLikeProductCode(serial)) {
-        ev.level = "warn";
-        ev.message = "Ressemble au code-barres produit (EAN), pas au n° de série — vérifier";
-      }
       beep(ev.level !== "error");
       setFlash({ serial, ...ev });
       setItems((prev) => prev.map((it) => (it.serial === serial ? { ...it, ...ev, charger } : it)));

@@ -28,4 +28,22 @@ function requireRole(...roles) {
   };
 }
 
-module.exports = { requireAuth, requireRole };
+// Les comptes LOGISTIQUE (gestion du stock au dépôt) n'ont accès qu'à
+// l'onglet Stock: on bloque toutes les autres routes métier (leads, devis,
+// rappels, tableau de bord, utilisateurs) avant même le routeur concerné.
+function denyLogistique(req, res, next) {
+  const header = req.headers.authorization || "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : null;
+  if (!token) return next(); // le routeur renverra 401 lui-même
+  try {
+    const payload = jwt.verify(token, process.env.JWT_SECRET);
+    if (payload.role === "LOGISTIQUE") {
+      return res.status(403).json({ error: "Accès réservé à l'onglet Stock" });
+    }
+  } catch {
+    /* token invalide: le routeur renverra 401 */
+  }
+  next();
+}
+
+module.exports = { requireAuth, requireRole, denyLogistique };

@@ -33,6 +33,9 @@ app.use(
 
 app.get("/api/health", (req, res) => res.json({ ok: true }));
 
+const { denyLogistique } = require("./middleware/auth");
+app.use(["/api/leads", "/api/reminders", "/api/quotes", "/api/dashboard", "/api/users"], denyLogistique);
+
 app.use("/api/auth", authRoutes);
 app.use("/api/leads", leadRoutes);
 app.use("/api/reminders", reminderRoutes);

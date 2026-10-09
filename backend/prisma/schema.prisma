@@ -22,6 +22,7 @@ enum Role {
   ADMIN       // Julien - tous droits
   COMMERCIAL  // Angélique, Ilham - Phase 2
   TECHNICIEN  // Kevin, Luc - Phase 2
+  LOGISTIQUE  // Fatima - accès uniquement à l'onglet Stock (aucun accès aux leads)
 }
 
 model User {

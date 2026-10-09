@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../api/client";
+import { api, getCurrentUser } from "../api/client";
 import { ALL_MODELS, STATUS_LABELS, MOVEMENT_LABELS, techName, leadLabel, fmtDate } from "../lib/stock";
 
 // Fiche d'une borne: statut, historique complet des mouvements, et actions
@@ -33,7 +33,7 @@ export default function ChargerModal({ chargerId, onClose, onChanged }) {
       return;
     }
     const t = setTimeout(() => {
-      api.getLeads({ q: q.trim() }).then((l) => setLeads(l.slice(0, 8))).catch(() => {});
+      api.searchStockClients(q.trim()).then(setLeads).catch(() => {});
     }, 250);
     return () => clearTimeout(t);
   }, [q, panel]);
@@ -81,7 +81,11 @@ export default function ChargerModal({ chargerId, onClose, onChanged }) {
               {c.lead && (
                 <div className="info-field">
                   <span className="info-label">Client</span>
-                  <Link className="info-value" to={`/leads/${c.lead.id}`}>{leadLabel(c.lead)}</Link>
+                  {getCurrentUser()?.role === "ADMIN" ? (
+                    <Link className="info-value" to={`/leads/${c.lead.id}`}>{leadLabel(c.lead)}</Link>
+                  ) : (
+                    <span className="info-value">{leadLabel(c.lead)}</span>
+                  )}
                   {c.installedAt && <span className="muted">Installée le {fmtDate(c.installedAt)}</span>}
                 </div>
               )}
@@ -112,7 +116,7 @@ export default function ChargerModal({ chargerId, onClose, onChanged }) {
             {panel === "install" && (
               <div className="charger-panel">
                 <label>
-                  Rechercher le client (nom, email, code postal)
+                  Rechercher le client (nom, entreprise, ville, code postal)
                   <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="ex. Dupont" />
                 </label>
                 <div className="lead-pick-list">

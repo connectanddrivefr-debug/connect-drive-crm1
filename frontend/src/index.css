@@ -435,3 +435,10 @@ main { padding: 24px; max-width: 1400px; margin: 0 auto; }
   .tech-form { grid-template-columns: 1fr 1fr; }
   .scan-settings { grid-template-columns: 1fr; }
 }
+
+.stock-access-card { margin-top: 16px; }
+.created-user {
+  margin-top: 12px; padding: 12px 14px; background: #f0fdf4; border: 1px solid #bbf7d0;
+  border-radius: var(--radius-sm); color: #166534; font-size: 14px; display: flex; flex-direction: column; gap: 4px;
+}
+.created-user .mono { color: var(--text); user-select: all; }

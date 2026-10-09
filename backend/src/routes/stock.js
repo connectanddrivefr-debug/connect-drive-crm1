@@ -1,6 +1,6 @@
 // Gestion de stock des bornes — suivi par numéro de série.
 // Réception au dépôt -> remise à un technicien -> installation chez le client.
-// Accès: ADMIN et COMMERCIAL (personnel du bureau/dépôt). Les techniciens
+// Accès: ADMIN (Julien) et LOGISTIQUE (Fatima) uniquement. Les techniciens
 // n'ont pas accès au CRM: ils n'existent que comme fiches (modèle Technician).
 const express = require("express");
 const prisma = require("../lib/prisma");
@@ -9,13 +9,13 @@ const { normalizeSerial } = require("../lib/serial");
 
 const router = express.Router();
 router.use(requireAuth);
-router.use(requireRole("ADMIN", "COMMERCIAL"));
+router.use(requireRole("ADMIN", "LOGISTIQUE"));
 
 // Au-delà de ce délai, une borne détenue par un technicien sans être
 // installée remonte en alerte (risque de perte / vol).
 const HELD_ALERT_DAYS = Number(process.env.STOCK_HELD_ALERT_DAYS || 30);
 
-const leadSelect = { id: true, firstName: true, lastName: true, email: true, city: true, company: true };
+const leadSelect = { id: true, firstName: true, lastName: true, city: true, company: true };
 const techSelect = { id: true, firstName: true, lastName: true };
 
 function cleanSerials(list) {
@@ -71,6 +71,29 @@ router.patch("/technicians/:id", async (req, res) => {
   } catch {
     res.status(404).json({ error: "Technicien introuvable" });
   }
+});
+
+// GET /api/stock/clients?q= — recherche minimale de clients pour rattacher
+// une borne installée (nom, entreprise, ville uniquement: le compte
+// LOGISTIQUE n'a pas accès aux fiches leads complètes).
+router.get("/clients", async (req, res) => {
+  const q = String(req.query.q || "").trim();
+  if (q.length < 2) return res.json([]);
+  const leads = await prisma.lead.findMany({
+    where: {
+      OR: [
+        { firstName: { contains: q, mode: "insensitive" } },
+        { lastName: { contains: q, mode: "insensitive" } },
+        { company: { contains: q, mode: "insensitive" } },
+        { city: { contains: q, mode: "insensitive" } },
+        { postalCode: { contains: q } },
+      ],
+    },
+    select: leadSelect,
+    orderBy: { updatedAt: "desc" },
+    take: 8,
+  });
+  res.json(leads);
 });
 
 // ---------------------------------------------------------------------------

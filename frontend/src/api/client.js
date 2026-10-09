@@ -77,6 +77,8 @@ export const api = {
   getReception: (id) => request(`/stock/receptions/${id}`),
   createDotation: (technicianId, serials) => request("/stock/dotations", { method: "POST", body: { technicianId, serials } }),
   returnToDepot: (serials) => request("/stock/returns", { method: "POST", body: { serials } }),
+  searchStockClients: (q) => request(`/stock/clients?q=${encodeURIComponent(q)}`),
+  createUser: (data) => request("/users", { method: "POST", body: data }),
   getTechnicians: () => request("/stock/technicians"),
   createTechnician: (data) => request("/stock/technicians", { method: "POST", body: data }),
   updateTechnician: (id, data) => request(`/stock/technicians/${id}`, { method: "PATCH", body: data }),

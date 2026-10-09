@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../api/client";
+import { api, getCurrentUser } from "../api/client";
 import ChargerModal from "../components/ChargerModal";
 import { STATUS_LABELS, techName, leadLabel, fmtDate } from "../lib/stock";
 
@@ -16,6 +16,31 @@ export default function StockPage() {
   const [showTechs, setShowTechs] = useState(false);
   const [newTech, setNewTech] = useState({ firstName: "", lastName: "", phone: "" });
   const [error, setError] = useState("");
+  const isAdmin = getCurrentUser()?.role === "ADMIN";
+  const [stockUsers, setStockUsers] = useState([]);
+  const [newUser, setNewUser] = useState({ firstName: "", lastName: "", email: "" });
+  const [createdUser, setCreatedUser] = useState(null);
+  const [userError, setUserError] = useState("");
+
+  async function loadStockUsers() {
+    if (!isAdmin) return;
+    const users = await api.getUsers();
+    setStockUsers(users.filter((u) => u.role === "LOGISTIQUE"));
+  }
+
+  async function addUser(e) {
+    e.preventDefault();
+    setUserError("");
+    setCreatedUser(null);
+    try {
+      const u = await api.createUser({ ...newUser, role: "LOGISTIQUE" });
+      setCreatedUser(u);
+      setNewUser({ firstName: "", lastName: "", email: "" });
+      await loadStockUsers();
+    } catch (err) {
+      setUserError(err.message);
+    }
+  }
 
   async function loadSummary() {
     const [s, t] = await Promise.all([api.getStockSummary(), api.getTechnicians()]);
@@ -34,6 +59,7 @@ export default function StockPage() {
 
   useEffect(() => {
     loadSummary().catch((e) => setError(e.message));
+    loadStockUsers().catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -215,6 +241,39 @@ export default function StockPage() {
           )}
         </div>
       </div>
+
+      {isAdmin && (
+        <div className="card stock-access-card">
+          <h3>Accès à l'onglet Stock</h3>
+          <p className="muted">
+            Comptes « Logistique »: ils voient uniquement l'onglet Stock (aucun accès au pipeline, aux clients ni aux devis).
+          </p>
+          {stockUsers.map((u) => (
+            <div key={u.id} className="bar-row">
+              <span>{u.firstName} {u.lastName}</span>
+              <span className="muted">{u.email}</span>
+            </div>
+          ))}
+          <form className="tech-form" onSubmit={addUser}>
+            <input placeholder="Prénom *" value={newUser.firstName} onChange={(e) => setNewUser({ ...newUser, firstName: e.target.value })} />
+            <input placeholder="Nom *" value={newUser.lastName} onChange={(e) => setNewUser({ ...newUser, lastName: e.target.value })} />
+            <input type="email" placeholder="Email *" value={newUser.email} onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} />
+            <button className="btn-primary" type="submit" disabled={!newUser.firstName || !newUser.lastName || !newUser.email}>
+              Créer l'accès
+            </button>
+          </form>
+          {userError && <p className="error">{userError}</p>}
+          {createdUser && (
+            <div className="created-user">
+              <strong>Accès créé pour {createdUser.firstName}.</strong> Transmettez-lui ces identifiants (le mot de passe
+              ne sera plus affiché) :
+              <div className="mono">Email : {createdUser.email}</div>
+              <div className="mono">Mot de passe : {createdUser.password}</div>
+              <div className="mono">Adresse : {window.location.origin}</div>
+            </div>
+          )}
+        </div>
+      )}
 
       {openId && <ChargerModal chargerId={openId} onClose={() => setOpenId(null)} onChanged={reloadAll} />}
     </div>
