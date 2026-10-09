@@ -14,6 +14,7 @@ const webhookRoutes = require("./routes/webhooks");
 const cronRoutes = require("./routes/cron");
 const setupRoutes = require("./routes/setup");
 const userRoutes = require("./routes/users");
+const stockRoutes = require("./routes/stock");
 
 const app = express();
 
@@ -43,6 +44,8 @@ app.use("/api/cron", cronRoutes);
 // Route à usage unique pour créer le compte admin après déploiement
 app.use("/api/setup", setupRoutes);
 app.use("/api/users", userRoutes);
+// Gestion de stock des bornes (numéros de série) — voir routes/stock.js
+app.use("/api/stock", stockRoutes);
 
 // Erreurs non gérées -> réponse JSON propre plutôt qu'un crash silencieux
 app.use((err, req, res, next) => {

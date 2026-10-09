@@ -44,6 +44,8 @@ model User {
   calls         CallLog[]
   depositsSent  Lead[]  @relation("DepositSentBy")
   balancesSent  Lead[]  @relation("BalanceSentBy")
+  stockReceptions StockReception[]
+  stockMovements  StockMovement[]
 }
 
 // ---------------------------------------------------------------------------
@@ -210,6 +212,9 @@ model Lead {
   emailLogs     EmailLog[]
   notes         Note[]
   calls         CallLog[]
+  // Gestion de stock: bornes installées chez ce client (voir modèle Charger)
+  chargers      Charger[]
+  stockMovements StockMovement[]
 
   @@index([status])
   @@index([postalCode])
@@ -309,4 +314,107 @@ model Note {
   authorId  String?
   content   String
   createdAt DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Gestion de stock des bornes (suivi par numéro de série)
+// ---------------------------------------------------------------------------
+// Circuit: réception au dépôt (scan de toutes les bornes reçues, BL joint)
+// -> remise à un technicien (scan "borne livrée à Kevin") -> installation
+// chez le client (phase 2: photo du QR code dans le PV Kraaft, ou rattachement
+// manuel depuis le CRM en attendant).
+// Les techniciens n'ont PAS de compte CRM: ils existent uniquement comme
+// fiche (nom, téléphone, identifiant Kraaft pour la phase 2).
+
+model Technician {
+  id           String   @id @default(uuid())
+  firstName    String
+  lastName     String?
+  phone        String?
+  // Phase 2 (Kraaft): identifiant de l'utilisateur dans Kraaft, pour
+  // l'ajouter automatiquement à la conversation du chantier.
+  kraaftUserId String?
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  chargers       Charger[]
+  stockMovements StockMovement[]
+}
+
+enum ChargerStatus {
+  EN_STOCK         // au dépôt
+  CHEZ_TECHNICIEN  // remise à un technicien, pas encore installée
+  INSTALLEE        // installée chez un client
+  RETOUR_SAV       // renvoyée au fournisseur / défectueuse
+}
+
+model StockReception {
+  id           String   @id @default(uuid())
+  supplier     String   // V2C, Smappee, Teltonika, Tesla...
+  blNumber     String?  // numéro du bon de livraison fournisseur
+  notes        String?
+  receivedAt   DateTime @default(now())
+  receivedBy   User?    @relation(fields: [receivedById], references: [id])
+  receivedById String?
+
+  chargers     Charger[]
+}
+
+model Charger {
+  id            String        @id @default(uuid())
+  serialNumber  String        @unique
+  model         String        // ex. "V2C Trydan", "Smappee EV Wall"
+  status        ChargerStatus @default(EN_STOCK)
+
+  reception     StockReception? @relation(fields: [receptionId], references: [id])
+  receptionId   String?
+
+  // Technicien qui détient la borne (CHEZ_TECHNICIEN) ou qui l'a installée.
+  technician    Technician?   @relation(fields: [technicianId], references: [id])
+  technicianId  String?
+  assignedAt    DateTime?     // date de remise au technicien
+
+  // Client chez qui la borne est installée (INSTALLEE)
+  lead          Lead?         @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  leadId        String?
+  installedAt   DateTime?
+
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  movements     StockMovement[]
+
+  @@index([status])
+  @@index([technicianId])
+  @@index([leadId])
+}
+
+enum StockMovementType {
+  RECEPTION     // entrée au dépôt
+  DOTATION      // remise à un technicien
+  RETOUR_DEPOT  // le technicien rapporte la borne au dépôt
+  INSTALLATION  // installée chez un client
+  RETOUR_SAV    // renvoyée au fournisseur
+  CORRECTION    // modification manuelle (erreur de saisie...)
+}
+
+model StockMovement {
+  id           String            @id @default(uuid())
+  charger      Charger           @relation(fields: [chargerId], references: [id], onDelete: Cascade)
+  chargerId    String
+  type         StockMovementType
+  technician   Technician?       @relation(fields: [technicianId], references: [id])
+  technicianId String?
+  lead         Lead?             @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  leadId       String?
+  user         User?             @relation(fields: [userId], references: [id])
+  userId       String?           // utilisateur CRM à l'origine du mouvement
+  source       String?           // "CRM" ou "KRAAFT" (phase 2)
+  notes        String?
+  createdAt    DateTime          @default(now())
+
+  @@index([chargerId])
+  @@index([createdAt])
 }

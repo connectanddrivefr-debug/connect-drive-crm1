@@ -26,7 +26,9 @@ async function request(path, options = {}) {
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || "Erreur inconnue");
+    const e = new Error(err.error || "Erreur inconnue");
+    e.details = err; // ex. liste des numéros de série en erreur (stock)
+    throw e;
   }
   if (res.status === 204) return null;
   return res.json();
@@ -59,6 +61,25 @@ export const api = {
   getUsers: () => request("/users"),
 
   getReminders: () => request("/reminders"),
+
+  // Gestion de stock des bornes (numéros de série) — voir routes/stock.js.
+  getStockSummary: () => request("/stock/summary"),
+  getChargers: (params = {}) => {
+    const clean = Object.fromEntries(Object.entries(params).filter(([, v]) => v));
+    const qs = new URLSearchParams(clean).toString();
+    return request(`/stock/chargers${qs ? `?${qs}` : ""}`);
+  },
+  getCharger: (id) => request(`/stock/chargers/${id}`),
+  updateCharger: (id, data) => request(`/stock/chargers/${id}`, { method: "PATCH", body: data }),
+  installCharger: (id, data) => request(`/stock/chargers/${id}/install`, { method: "POST", body: data }),
+  lookupSerial: (serial) => request(`/stock/lookup?serial=${encodeURIComponent(serial)}`),
+  createReception: (data) => request("/stock/receptions", { method: "POST", body: data }),
+  getReception: (id) => request(`/stock/receptions/${id}`),
+  createDotation: (technicianId, serials) => request("/stock/dotations", { method: "POST", body: { technicianId, serials } }),
+  returnToDepot: (serials) => request("/stock/returns", { method: "POST", body: { serials } }),
+  getTechnicians: () => request("/stock/technicians"),
+  createTechnician: (data) => request("/stock/technicians", { method: "POST", body: data }),
+  updateTechnician: (id, data) => request(`/stock/technicians/${id}`, { method: "PATCH", body: data }),
 
   // Leads simulateur avec numéro de téléphone non vérifié par SMS (Twilio),
   // suspicion de spam — voir GET /api/leads/unverified (admin uniquement).

@@ -9,6 +9,8 @@ const KanbanPage = lazy(() => import("./pages/KanbanPage"));
 const ContactDetailPage = lazy(() => import("./pages/ContactDetailPage"));
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
 const RemindersPage = lazy(() => import("./pages/RemindersPage"));
+const StockPage = lazy(() => import("./pages/StockPage"));
+const StockScanPage = lazy(() => import("./pages/StockScanPage"));
 
 function PageFallback() {
   return <p className="muted">Chargement…</p>;
@@ -35,6 +37,7 @@ function Layout({ children }) {
         <nav>
           <Link to="/">Pipeline</Link>
           <Link to="/rappels">Rappels</Link>
+          <Link to="/stock">Stock</Link>
           <Link to="/dashboard">Tableau de bord</Link>
         </nav>
         {getToken() && (
@@ -93,6 +96,29 @@ export default function App() {
             </RequireAuth>
           }
         />
+        <Route
+          path="/stock"
+          element={
+            <RequireAuth>
+              <Layout>
+                <StockPage />
+              </Layout>
+            </RequireAuth>
+          }
+        />
+        {["reception", "dotation", "retour"].map((mode) => (
+          <Route
+            key={mode}
+            path={`/stock/${mode}`}
+            element={
+              <RequireAuth>
+                <Layout>
+                  <StockScanPage key={mode} mode={mode} />
+                </Layout>
+              </RequireAuth>
+            }
+          />
+        ))}
       </Routes>
     </Suspense>
   );
