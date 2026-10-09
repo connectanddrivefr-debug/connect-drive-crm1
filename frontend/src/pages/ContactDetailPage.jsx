@@ -113,6 +113,8 @@ export default function ContactDetailPage() {
   const [depositAmountInput, setDepositAmountInput] = useState("");
   const [balanceAmountInput, setBalanceAmountInput] = useState("");
   const [paymentLoading, setPaymentLoading] = useState(null); // "deposit" | "balance" | null
+  const [technicians, setTechnicians] = useState([]);
+  const [techSaving, setTechSaving] = useState(false);
 
   async function load() {
     const data = await api.getLead(id);
@@ -124,6 +126,7 @@ export default function ContactDetailPage() {
     // Échoue silencieusement si l'utilisateur n'est pas admin (403) —
     // le sélecteur d'assignation reste simplement caché dans ce cas.
     api.getUsers().then(setUsers).catch(() => setUsers(null));
+    api.getInstallTechnicians().then(setTechnicians).catch(() => setTechnicians([]));
   }, [id]);
 
   useEffect(() => {
@@ -163,6 +166,18 @@ export default function ContactDetailPage() {
   async function changeInstallationStatus(status) {
     await api.updateLead(id, { installationStatus: status });
     load();
+  }
+
+  // Technicien en charge: déclenche la création de la conversation Kraaft
+  // du chantier (si l'installation est programmée) et l'ajout du technicien.
+  async function changeInstallTechnician(technicianId) {
+    setTechSaving(true);
+    try {
+      await api.updateLead(id, { installTechnicianId: technicianId || null });
+      await load();
+    } finally {
+      setTechSaving(false);
+    }
   }
 
   async function saveInstallationDate(e) {
@@ -576,6 +591,39 @@ export default function ContactDetailPage() {
                 />
                 <button type="submit" className="btn-primary">Enregistrer</button>
               </form>
+            )}
+
+            {lead.installationStatus === "PROGRAMMEE" && (
+              <div className="info-field">
+                <span className="info-label">Technicien en charge</span>
+                <select
+                  value={lead.installTechnicianId || ""}
+                  disabled={techSaving}
+                  onChange={(e) => changeInstallTechnician(e.target.value)}
+                >
+                  <option value="">— Choisir le technicien —</option>
+                  {technicians.map((t) => (
+                    <option key={t.id} value={t.id}>{t.firstName} {t.lastName || ""}</option>
+                  ))}
+                </select>
+                {techSaving && <span className="muted">Création de la conversation Kraaft…</span>}
+                {!techSaving && lead.kraaftRoomId && !lead.kraaftSyncError && (
+                  <span className="kraaft-ok">✓ Conversation Kraaft du chantier créée</span>
+                )}
+                {!techSaving && lead.kraaftSyncError && <span className="error">Kraaft : {lead.kraaftSyncError}</span>}
+              </div>
+            )}
+
+            {lead.chargers && lead.chargers.length > 0 && (
+              <div className="info-field">
+                <span className="info-label">Borne(s) installée(s)</span>
+                {lead.chargers.map((c) => (
+                  <span key={c.id} className="info-value">
+                    <span className="mono">{c.serialNumber}</span> — {c.model}
+                    {c.installedAt && <span className="muted"> · {new Date(c.installedAt).toLocaleDateString("fr-FR")}</span>}
+                  </span>
+                ))}
+              </div>
             )}
           </div>
         </section>

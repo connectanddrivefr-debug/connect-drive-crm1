@@ -15,6 +15,7 @@ const cronRoutes = require("./routes/cron");
 const setupRoutes = require("./routes/setup");
 const userRoutes = require("./routes/users");
 const stockRoutes = require("./routes/stock");
+const technicianRoutes = require("./routes/technicians");
 
 const app = express();
 
@@ -34,7 +35,7 @@ app.use(
 app.get("/api/health", (req, res) => res.json({ ok: true }));
 
 const { denyLogistique } = require("./middleware/auth");
-app.use(["/api/leads", "/api/reminders", "/api/quotes", "/api/dashboard", "/api/users"], denyLogistique);
+app.use(["/api/leads", "/api/reminders", "/api/quotes", "/api/dashboard", "/api/users", "/api/technicians"], denyLogistique);
 
 app.use("/api/auth", authRoutes);
 app.use("/api/leads", leadRoutes);
@@ -49,6 +50,7 @@ app.use("/api/setup", setupRoutes);
 app.use("/api/users", userRoutes);
 // Gestion de stock des bornes (numéros de série) — voir routes/stock.js
 app.use("/api/stock", stockRoutes);
+app.use("/api/technicians", technicianRoutes);
 
 // Erreurs non gérées -> réponse JSON propre plutôt qu'un crash silencieux
 app.use((err, req, res, next) => {

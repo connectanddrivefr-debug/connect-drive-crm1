@@ -167,6 +167,15 @@ model Lead {
   // Empêche de renvoyer plusieurs fois le rappel J-2 pour la même date d'installation.
   installationReminderSentAt DateTime?
 
+  // Technicien en charge de l'installation (choisi au passage en
+  // "Installation programmée") + conversation Kraaft du chantier, créée
+  // automatiquement (integrations/kraaft.js). La photo du QR code de la borne
+  // postée dans cette conversation rattache la borne à ce client.
+  installTechnician   Technician? @relation("LeadInstallTechnician", fields: [installTechnicianId], references: [id])
+  installTechnicianId String?
+  kraaftRoomId        String?     @unique
+  kraaftSyncError     String?     // dernière erreur de création / ajout membre
+
   // --- Séquence de relance devis (jobs/quoteReminders.js) ---
   // 5 relances client automatiques tant que le lead reste en DEVIS_ENVOYE:
   // J+1 (9h), +2 j, +3 j, +3 j, +4 j. Remise à zéro à chaque (re)passage en
@@ -216,6 +225,7 @@ model Lead {
   // Gestion de stock: bornes installées chez ce client (voir modèle Charger)
   chargers      Charger[]
   stockMovements StockMovement[]
+  kraaftScans   KraaftScan[]
 
   @@index([status])
   @@index([postalCode])
@@ -341,6 +351,7 @@ model Technician {
 
   chargers       Charger[]
   stockMovements StockMovement[]
+  leadsToInstall Lead[] @relation("LeadInstallTechnician")
 }
 
 enum ChargerStatus {
@@ -386,6 +397,7 @@ model Charger {
   updatedAt     DateTime      @updatedAt
 
   movements     StockMovement[]
+  kraaftScans   KraaftScan[]
 
   @@index([status])
   @@index([technicianId])
@@ -418,4 +430,42 @@ model StockMovement {
 
   @@index([chargerId])
   @@index([createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Intégration Kraaft (API publique) — voir integrations/kraaft.js
+// ---------------------------------------------------------------------------
+// Petit stockage clé/valeur: curseur ("flake") du dernier événement de message
+// traité, identifiant de l'espace Kraaft, date de dernière synchro.
+model KraaftState {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+enum KraaftScanStatus {
+  RATTACHEE   // numéro reconnu -> borne passée en INSTALLEE chez le client
+  INCONNUE    // code lu mais aucune borne de ce numéro dans le stock
+  A_VERIFIER  // borne trouvée mais déjà installée chez un autre client
+  TRAITEE     // vérifiée / ignorée à la main depuis la page Stock
+}
+
+// Codes lus sur les photos (ou dans le texte) postées dans les conversations
+// Kraaft des chantiers. On ne stocke jamais les photos elles-mêmes.
+model KraaftScan {
+  id         String           @id @default(uuid())
+  messageId  String
+  roomId     String
+  lead       Lead?            @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  leadId     String?
+  senderId   String?
+  code       String           // numéro de série lu
+  status     KraaftScanStatus
+  charger    Charger?         @relation(fields: [chargerId], references: [id], onDelete: SetNull)
+  chargerId  String?
+  note       String?
+  createdAt  DateTime         @default(now())
+
+  @@unique([messageId, code])
+  @@index([status])
 }

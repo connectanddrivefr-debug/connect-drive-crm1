@@ -6,6 +6,7 @@ const { runVisitReminders } = require("../jobs/visitReminders");
 const { runPhotoReminders } = require("../jobs/photoReminders");
 const { runInstallationReminders } = require("../jobs/installationReminders");
 const { pollWebflowLeads } = require("../integrations/webflowGmailPoll");
+const { syncMessages } = require("../integrations/kraaft");
 
 const router = express.Router();
 
@@ -65,6 +66,18 @@ router.get("/webflow-poll", checkCronSecret, async (req, res) => {
   try {
     const n = await pollWebflowLeads();
     res.json({ ok: true, leadsCreated: n });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Synchro quotidienne Kraaft: photos des numéros de série postées dans les
+// conversations de chantier -> bornes passées en "installée".
+router.get("/kraaft-sync", checkCronSecret, async (req, res) => {
+  try {
+    const result = await syncMessages({ budgetMs: 8000 });
+    res.json({ ok: true, ...result });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });

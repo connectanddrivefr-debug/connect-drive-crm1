@@ -7,6 +7,7 @@ const {
 } = require("../integrations/brevo");
 const { sendMetaConversionEvent } = require("../integrations/metaConversions");
 const { createPaymentOrder } = require("../integrations/revolut");
+const { ensureRoomForLead } = require("../integrations/kraaft");
 
 const router = express.Router();
 router.use(requireAuth);
@@ -133,6 +134,8 @@ router.get("/:id", async (req, res) => {
       notes: { orderBy: { createdAt: "desc" } },
       calls: { orderBy: { callAt: "desc" } },
       assignedTo: true,
+      installTechnician: { select: { id: true, firstName: true, lastName: true } },
+      chargers: { select: { id: true, serialNumber: true, model: true, installedAt: true } },
     },
   });
   if (!lead) return res.status(404).json({ error: "Lead introuvable" });
@@ -197,7 +200,7 @@ router.patch("/:id", async (req, res) => {
     technicalVisitStatus, technicalVisitDate, technicalVisitSlots,
     callbackRequested, photosStatus,
     installationStatus, installationDate,
-    phoneVerified,
+    phoneVerified, installTechnicianId,
   } = req.body;
 
   const before = await prisma.lead.findUnique({ where: { id: req.params.id } });
@@ -249,6 +252,9 @@ router.patch("/:id", async (req, res) => {
   if (installationStatus !== undefined) {
     rappelData.installationStatus = installationStatus;
   }
+  if (installTechnicianId !== undefined) {
+    rappelData.installTechnicianId = installTechnicianId || null;
+  }
   if (installationDate !== undefined) {
     rappelData.installationDate = installationDate ? new Date(installationDate) : null;
     // Nouvelle date (ou date effacée) -> on autorise à nouveau le rappel J-2.
@@ -277,6 +283,16 @@ router.patch("/:id", async (req, res) => {
     },
     include: { assignedTo: true },
   });
+
+  // Installation programmée + technicien choisi -> conversation Kraaft du
+  // chantier créée automatiquement, technicien ajouté (voir integrations/kraaft.js).
+  if (
+    (installationStatus !== undefined || installTechnicianId !== undefined) &&
+    lead.installationStatus === "PROGRAMMEE" &&
+    lead.installTechnicianId
+  ) {
+    await ensureRoomForLead(lead.id);
+  }
 
   // Quand un lead est assigné (ou réassigné) à un commercial, il reçoit un
   // email de prise en charge personnalisé, envoyé depuis l'adresse du commercial.

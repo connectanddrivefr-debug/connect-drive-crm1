@@ -6,6 +6,7 @@ const express = require("express");
 const prisma = require("../lib/prisma");
 const { requireAuth, requireRole } = require("../middleware/auth");
 const { normalizeSerial } = require("../lib/serial");
+const kraaft = require("../integrations/kraaft");
 
 const router = express.Router();
 router.use(requireAuth);
@@ -438,6 +439,39 @@ router.post("/returns", async (req, res) => {
     }
   }, { timeout: 30000 });
   res.json({ count: serials.length });
+});
+
+// ---------------------------------------------------------------------------
+// Kraaft: état de la synchro, synchro manuelle, numéros à vérifier
+// ---------------------------------------------------------------------------
+router.get("/kraaft", async (req, res) => {
+  const configured = kraaft.isConfigured();
+  const [lastSyncAt, scans] = await Promise.all([
+    configured ? kraaft.getState("lastSyncAt") : null,
+    prisma.kraaftScan.findMany({
+      where: { status: { in: ["INCONNUE", "A_VERIFIER"] } },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+      include: { lead: { select: leadSelect }, charger: { select: { id: true, serialNumber: true, model: true } } },
+    }),
+  ]);
+  res.json({ configured, lastSyncAt, scans });
+});
+
+router.post("/kraaft/sync", async (req, res) => {
+  if (!kraaft.isConfigured()) return res.status(400).json({ error: "Clé API Kraaft non configurée (KRAAFT_API_KEY)" });
+  try {
+    res.json(await kraaft.syncMessages({ budgetMs: 8000 }));
+  } catch (err) {
+    console.error("[Kraaft] synchro:", err.message);
+    res.status(502).json({ error: "La synchronisation Kraaft a échoué, réessayez plus tard" });
+  }
+});
+
+router.patch("/kraaft/scans/:id", async (req, res) => {
+  const scan = await prisma.kraaftScan.update({ where: { id: req.params.id }, data: { status: "TRAITEE" } }).catch(() => null);
+  if (!scan) return res.status(404).json({ error: "Introuvable" });
+  res.json(scan);
 });
 
 module.exports = router;

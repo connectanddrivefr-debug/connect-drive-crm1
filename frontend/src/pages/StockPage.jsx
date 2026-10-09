@@ -21,6 +21,40 @@ export default function StockPage() {
   const [newUser, setNewUser] = useState({ firstName: "", lastName: "", email: "" });
   const [createdUser, setCreatedUser] = useState(null);
   const [userError, setUserError] = useState("");
+  const [kraaft, setKraaft] = useState(null);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState("");
+
+  async function loadKraaft() {
+    setKraaft(await api.getKraaftStatus());
+  }
+
+  async function runKraaftSync() {
+    setSyncing(true);
+    setSyncMsg("");
+    try {
+      let total = 0;
+      let r;
+      // plusieurs passages si beaucoup de messages en attente
+      for (let i = 0; i < 6; i++) {
+        r = await api.syncKraaft();
+        total += r.matched || 0;
+        if (!r.hasMore) break;
+      }
+      setSyncMsg(total ? `${total} borne(s) passée(s) en « installée »` : "Aucune nouvelle borne installée");
+      reloadAll();
+      await loadKraaft();
+    } catch (e) {
+      setSyncMsg(e.message);
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  async function dismissScan(id) {
+    await api.dismissKraaftScan(id);
+    await loadKraaft();
+  }
 
   async function loadStockUsers() {
     if (!isAdmin) return;
@@ -60,6 +94,7 @@ export default function StockPage() {
   useEffect(() => {
     loadSummary().catch((e) => setError(e.message));
     loadStockUsers().catch(() => {});
+    loadKraaft().catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -116,6 +151,45 @@ export default function StockPage() {
         <div className="reminder-banner">
           <strong>{overdue.length} borne(s) chez un technicien depuis plus de {summary.alertDays} jours sans installation :</strong>{" "}
           {overdue.map((c) => `${c.serialNumber} (${techName(c.tech)}, ${c.days} j)`).join(", ")}
+        </div>
+      )}
+
+      {kraaft && (
+        <div className="card kraaft-card">
+          <div className="kraaft-head">
+            <h3>Installations via Kraaft</h3>
+            {kraaft.configured && (
+              <button className="btn-ghost" onClick={runKraaftSync} disabled={syncing}>
+                {syncing ? "Synchronisation…" : "Synchroniser Kraaft"}
+              </button>
+            )}
+          </div>
+          {!kraaft.configured ? (
+            <p className="muted">Clé API Kraaft pas encore configurée : les photos de numéros de série ne sont pas encore lues.</p>
+          ) : (
+            <p className="muted">
+              Les photos du S/N postées dans les conversations de chantier mettent les bornes à jour automatiquement (tous les
+              jours à 17h, ou avec ce bouton).
+              {kraaft.lastSyncAt && ` Dernière synchro : ${fmtDate(kraaft.lastSyncAt, true)}.`}
+            </p>
+          )}
+          {syncMsg && <p className="kraaft-ok">{syncMsg}</p>}
+          {kraaft.scans.length > 0 && (
+            <>
+              <strong>À vérifier ({kraaft.scans.length})</strong>
+              {kraaft.scans.map((s) => (
+                <div key={s.id} className="kraaft-scan">
+                  <span>
+                    <span className="mono">{s.code}</span> — {leadLabel(s.lead)}
+                    <span className="muted">
+                      {" "}· {s.status === "INCONNUE" ? "numéro absent du stock (réception non scannée ?)" : s.note}
+                    </span>
+                  </span>
+                  <button className="btn-link" onClick={() => dismissScan(s.id)}>Marquer traité</button>
+                </div>
+              ))}
+            </>
+          )}
         </div>
       )}
 
