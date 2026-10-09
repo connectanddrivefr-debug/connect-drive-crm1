@@ -90,7 +90,11 @@ async function ensureRoomForLead(leadId) {
     if (!roomId) {
       const room = await kraaft(`/workspaces/${ws}/rooms`, {
         method: "POST",
-        body: { name: roomName(lead), private: true, emoji: "🔌", members: [] },
+        // Conversation non privée: la clé API agit comme un "agent" de l'espace
+        // (pas comme Julien) et doit garder l'accès pour lire les photos et
+        // ajouter les membres. Les invités externes ne voient de toute façon
+        // que les conversations dont ils sont membres.
+        body: { name: roomName(lead), private: false, emoji: "🔌", members: [] },
       });
       roomId = room.id;
       await prisma.lead.update({ where: { id: lead.id }, data: { kraaftRoomId: roomId } });
