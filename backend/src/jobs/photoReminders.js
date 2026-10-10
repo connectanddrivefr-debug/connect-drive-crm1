@@ -5,7 +5,7 @@
 // Lancé en cron (voir vercel.json) ou manuellement via `node src/jobs/photoReminders.js`.
 
 const prisma = require("../lib/prisma");
-const { sendPhotoReminderInternal } = require("../integrations/brevo");
+const { sendPhotoReminderDigest } = require("../integrations/brevo");
 
 const DELAY_DAYS = parseInt(process.env.PHOTO_REMINDER_DELAY_DAYS || "2", 10);
 
@@ -21,19 +21,26 @@ async function runPhotoReminders() {
     include: { assignedTo: true },
   });
 
-  let sent = 0;
+  // Un seul email récapitulatif par commercial (et non un email par lead).
+  const byUser = new Map();
   for (const lead of leads) {
     if (!lead.assignedTo?.email) continue; // pas de commercial -> pas de rappel (sur demande)
+    if (!byUser.has(lead.assignedTo.id)) byUser.set(lead.assignedTo.id, { user: lead.assignedTo, leads: [] });
+    byUser.get(lead.assignedTo.id).leads.push(lead);
+  }
+
+  let sent = 0;
+  for (const { user, leads: userLeads } of byUser.values()) {
     try {
-      await sendPhotoReminderInternal(lead, lead.assignedTo);
-      await prisma.lead.update({
-        where: { id: lead.id },
+      await sendPhotoReminderDigest(user, userLeads);
+      await prisma.lead.updateMany({
+        where: { id: { in: userLeads.map((l) => l.id) } },
         data: { photosReminderSentAt: new Date() },
       });
-      sent += 1;
-      console.log(`[reminders] Rappel photos envoyé pour ${lead.email}`);
+      sent += userLeads.length;
+      console.log(`[reminders] Rappel photos groupé envoyé à ${user.email} (${userLeads.length} lead(s))`);
     } catch (err) {
-      console.error(`[reminders] Échec rappel photos pour ${lead.id}:`, err.message);
+      console.error(`[reminders] Échec rappel photos groupé pour ${user.email}:`, err.message);
     }
   }
 

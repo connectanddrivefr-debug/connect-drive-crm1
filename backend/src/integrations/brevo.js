@@ -379,6 +379,36 @@ async function sendPhotoReminderInternal(lead, assignedUser) {
   });
 }
 
+// Version groupée: UN seul email récapitulatif par commercial, listant tous les
+// leads dont les photos sont toujours attendues (évite de recevoir N emails
+// d'un coup). Un log par lead est tout de même enregistré sur chaque fiche.
+async function sendPhotoReminderDigest(assignedUser, leads) {
+  if (!assignedUser?.email || !leads.length) return;
+  const rows = leads
+    .map((l) => `<li>${l.firstName || ""} ${l.lastName || ""} — ${l.phone || l.email}</li>`)
+    .join("");
+  const subject =
+    leads.length === 1
+      ? `Rappel: photos non reçues — ${leads[0].firstName || ""} ${leads[0].lastName || ""}`
+      : `Rappel: photos non reçues (${leads.length} clients)`;
+  await sendEmail({
+    to: assignedUser.email,
+    subject,
+    htmlContent: `
+      <p>Bonjour ${assignedUser.firstName || ""},</p>
+      <p>Ces clients n'ont toujours pas envoyé les photos demandées :</p>
+      <ul>${rows}</ul>
+      <p>N'hésite pas à les relancer.</p>
+    `,
+    type: "RAPPEL_PHOTOS",
+  });
+  for (const l of leads) {
+    await prisma.emailLog.create({
+      data: { leadId: l.id, type: "RAPPEL_PHOTOS", recipient: assignedUser.email, subject, success: true },
+    });
+  }
+}
+
 // Rappel J-2 avant une installation programmée: on demande au commercial de
 // reconfirmer le rendez-vous d'installation avec le technicien et le client.
 async function sendInstallationReminderInternal(lead, assignedUser) {
@@ -409,5 +439,6 @@ module.exports = {
   sendSignatureConfirmation,
   sendVisitReminderInternal,
   sendPhotoReminderInternal,
+  sendPhotoReminderDigest,
   sendInstallationReminderInternal,
 };
