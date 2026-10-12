@@ -262,7 +262,9 @@ async function syncMessages({ budgetMs = 8000 } = {}) {
     if (after) qs.set("after", after);
     const res = await kraaft(`/workspaces/${ws}/rooms/messages/events?${qs}`, { raw: true });
     const events = await res.json();
-    hasMore = res.headers.get("x-kraaft-has-more") === "true" && events.length > 0;
+    const hm = (res.headers.get("x-kraaft-has-more") || "").toLowerCase();
+    // Page pleine = probablement d'autres événements derrière (en-tête absent ou non standard)
+    hasMore = events.length > 0 && (hm === "true" || hm === "1" || events.length >= 200);
     if (!events.length) break;
     // Corrige d'abord les ID Kraaft mal recopiés (l/I, O/0) des auteurs de
     // cette page, pour attribuer l'installation au bon technicien.
