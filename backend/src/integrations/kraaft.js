@@ -258,7 +258,7 @@ async function syncMessages({ budgetMs = 8000 } = {}) {
   const byRoom = new Map(leads.map((l) => [l.kraaftRoomId, l]));
 
   while (hasMore && Date.now() - started < budgetMs) {
-    const qs = new URLSearchParams({ limit: "500" });
+    const qs = new URLSearchParams({ limit: "200" });
     if (after) qs.set("after", after);
     const res = await kraaft(`/workspaces/${ws}/rooms/messages/events?${qs}`, { raw: true });
     const events = await res.json();
@@ -269,15 +269,19 @@ async function syncMessages({ budgetMs = 8000 } = {}) {
     await autoCorrectTechnicianIds(new Set(events.map((e) => e.senderId).filter(Boolean)));
 
     for (const ev of events) {
-      if (Date.now() - started > budgetMs) {
+      const lead = byRoom.get(ev.roomId);
+      const content = ev.message && ev.message.after;
+      const relevant = lead && ev.event === "sent" && content;
+      // Le budget de temps ne s'applique qu'aux messages de chantier (lecture
+      // d'image): les autres événements sont juste passés, pour que le
+      // curseur avance toujours, même sur un long historique.
+      if (relevant && processed > 0 && Date.now() - started > budgetMs) {
         hasMore = true;
         break;
       }
       after = ev.flake;
       processed++;
-      const lead = byRoom.get(ev.roomId);
-      const content = ev.message && ev.message.after;
-      if (!lead || ev.event !== "sent" || !content) continue;
+      if (!relevant) continue;
 
       const codes = [];
       if (content.type === "image" && content.file && content.file.url) {
