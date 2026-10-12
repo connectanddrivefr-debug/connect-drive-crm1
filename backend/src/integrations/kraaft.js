@@ -304,4 +304,17 @@ async function syncMessages({ budgetMs = 8000 } = {}) {
   return { configured: true, processed, matched, hasMore };
 }
 
-module.exports = { isConfigured, ensureRoomForLead, syncMessages, getState, readCodesFromImage };
+// Test de connexion: renvoie le nom de l'espace Kraaft, ou l'erreur.
+async function checkConnection() {
+  if (!isConfigured()) return { ok: false, error: "Clé API non configurée" };
+  try {
+    const list = await kraaft("/workspaces");
+    const ws = await getWorkspaceId();
+    const current = (list || []).find((w) => w.workspaceId === ws) || (list || [])[0];
+    return { ok: true, workspaceName: current ? current.workspaceName : null };
+  } catch (e) {
+    return { ok: false, error: e.status === 401 ? "Clé API refusée par Kraaft" : e.status === 403 ? "API non activée ou accès refusé" : "Kraaft injoignable" };
+  }
+}
+
+module.exports = { checkConnection, isConfigured, ensureRoomForLead, syncMessages, getState, readCodesFromImage };

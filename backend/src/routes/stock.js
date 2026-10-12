@@ -455,7 +455,11 @@ router.get("/kraaft", async (req, res) => {
       include: { lead: { select: leadSelect }, charger: { select: { id: true, serialNumber: true, model: true } } },
     }),
   ]);
-  res.json({ configured, lastSyncAt, scans });
+  const connection = configured ? await kraaft.checkConnection() : null;
+  const techsSeen = configured
+    ? await prisma.technician.count({ where: { active: true, kraaftUserId: { not: null } } })
+    : 0;
+  res.json({ configured, connection, lastSyncAt, scans, techsWithKraaftId: techsSeen });
 });
 
 router.post("/kraaft/sync", async (req, res) => {

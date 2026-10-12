@@ -166,8 +166,11 @@ export default function StockPage() {
           </div>
           {!kraaft.configured ? (
             <p className="muted">Clé API Kraaft pas encore configurée : les photos de numéros de série ne sont pas encore lues.</p>
+          ) : kraaft.connection && !kraaft.connection.ok ? (
+            <p className="error">Connexion Kraaft impossible : {kraaft.connection.error}</p>
           ) : (
             <p className="muted">
+              {kraaft.connection?.workspaceName && <strong className="kraaft-ok">✓ Connecté à Kraaft ({kraaft.connection.workspaceName}). </strong>}
               Les photos du S/N postées dans les conversations de chantier mettent les bornes à jour automatiquement (tous les
               jours à 17h, ou avec ce bouton).
               {kraaft.lastSyncAt && ` Dernière synchro : ${fmtDate(kraaft.lastSyncAt, true)}.`}
