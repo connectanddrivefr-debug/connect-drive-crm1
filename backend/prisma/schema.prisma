@@ -378,6 +378,11 @@ model Charger {
   id            String        @id @default(uuid())
   serialNumber  String        @unique
   model         String        // ex. "V2C Trydan", "Smappee EV Wall"
+  // Référence produit exacte (code-barres EAN du carton + code fabricant,
+  // ex. 3770038367006 / TRY32-1-OL5-F): distingue 7,4 kW / 22 kW / longueur
+  // de câble... Voir ProductRef.
+  ean           String?
+  reference     String?
   status        ChargerStatus @default(EN_STOCK)
 
   reception     StockReception? @relation(fields: [receptionId], references: [id])
@@ -403,6 +408,19 @@ model Charger {
   @@index([status])
   @@index([technicianId])
   @@index([leadId])
+  @@index([ean])
+}
+
+// Catalogue des références produit, appris au fil des réceptions: un code
+// EAN (ou un code fabricant lu sur un BL) -> un libellé lisible.
+model ProductRef {
+  id        String   @id @default(uuid())
+  ean       String?  @unique
+  reference String?  @unique // code fabricant, ex. TRY32-1-OL5-F
+  label     String            // ex. "V2C Trydan 7,4 kW câble 5 m"
+  supplier  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 enum StockMovementType {

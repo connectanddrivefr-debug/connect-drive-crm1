@@ -64,6 +64,9 @@ export default function ChargerModal({ chargerId, onClose, onChanged }) {
               <div>
                 <div className="charger-serial">{c.serialNumber}</div>
                 <div className="muted">{c.model}</div>
+                {(c.reference || c.ean) && (
+                  <div className="muted mono">{[c.reference, c.ean && `EAN ${c.ean}`].filter(Boolean).join(" · ")}</div>
+                )}
               </div>
               <span className={`badge stock-badge-${c.status.toLowerCase()}`}>{STATUS_LABELS[c.status]}</span>
             </div>

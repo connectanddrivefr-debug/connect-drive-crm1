@@ -11,6 +11,7 @@ const DashboardPage = lazy(() => import("./pages/DashboardPage"));
 const RemindersPage = lazy(() => import("./pages/RemindersPage"));
 const StockPage = lazy(() => import("./pages/StockPage"));
 const StockScanPage = lazy(() => import("./pages/StockScanPage"));
+const StockBlPage = lazy(() => import("./pages/StockBlPage"));
 
 function PageFallback() {
   return <p className="muted">Chargement…</p>;
@@ -113,7 +114,17 @@ export default function App() {
             </RequireAuth>
           }
         />
-        {["reception", "dotation", "retour"].map((mode) => (
+        <Route
+          path="/stock/bl"
+          element={
+            <RequireAuth stock>
+              <Layout>
+                <StockBlPage />
+              </Layout>
+            </RequireAuth>
+          }
+        />
+        {["reception", "dotation", "retour", "classer"].map((mode) => (
           <Route
             key={mode}
             path={`/stock/${mode}`}

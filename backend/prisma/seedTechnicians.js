@@ -41,6 +41,13 @@ async function main() {
       }
     }
     console.log(`[seedTechnicians] ${created} technicien(s) créé(s)`);
+    // Référence connue (étiquette V2C fournie par Julien le 09/10/2026)
+    const known = await prisma.productRef.findUnique({ where: { ean: "3770038367006" } });
+    if (!known) {
+      await prisma.productRef.create({
+        data: { ean: "3770038367006", reference: "TRY32-1-OL5-F", label: "V2C Trydan 7,4 kW câble 5 m", supplier: "V2C" },
+      });
+    }
   } catch (err) {
     console.error("[seedTechnicians] ignoré:", err.message);
   } finally {

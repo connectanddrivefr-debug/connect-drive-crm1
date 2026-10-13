@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import Scanner, { beep } from "../components/Scanner";
+import { readLabel } from "../lib/labelScan";
 import {
   SUPPLIERS,
   MODELS_BY_SUPPLIER,
@@ -17,10 +18,13 @@ import {
 // - reception: entrée au dépôt de toutes les bornes reçues (BL fournisseur)
 // - dotation: remise de bornes à un technicien ("borne livrée à Kevin")
 // - retour: le technicien rapporte des bornes au dépôt
+// - classer: bornes déjà en stock, on photographie l'étiquette pour
+//   enregistrer leur référence exacte (EAN) — corrige un stock scanné sans réf.
 const TITLES = {
   reception: "Nouvelle réception",
   dotation: "Remise à un technicien",
   retour: "Retour au dépôt",
+  classer: "Classer par référence (étiquettes)",
 };
 
 // Vérifie l'état d'une borne scannée selon le mode, à partir de la réponse
@@ -31,6 +35,7 @@ function evaluate(mode, charger, technicianId) {
     return { level: "ok", message: "" };
   }
   if (!charger) return { level: "error", message: "Inconnue du stock — faire d'abord la réception" };
+  if (mode === "classer") return { level: "ok", message: `Actuellement : ${charger.model}` };
   if (mode === "dotation") {
     if (charger.status === "INSTALLEE") return { level: "error", message: `Déjà installée (${leadLabel(charger.lead)})` };
     if (charger.status === "RETOUR_SAV") return { level: "error", message: "En retour SAV" };
@@ -62,6 +67,66 @@ export default function StockScanPage({ mode }) {
   techRef.current = technicianId;
   const modelRef = useRef(model);
   modelRef.current = model;
+  // Référence produit courante (EAN lu sur le carton): appliquée aux S/N
+  // scannés ensuite, jusqu'au prochain EAN.
+  const [currentEan, setCurrentEan] = useState(null);
+  const eanRef = useRef(null);
+  eanRef.current = currentEan;
+  const [refs, setRefs] = useState([]);
+  const refsRef = useRef([]);
+  refsRef.current = refs;
+  const modelInputRef = useRef(null);
+  const photoInputRef = useRef(null);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const usesRefs = mode === "reception" || mode === "classer";
+
+  useEffect(() => {
+    if (usesRefs) api.getRefs().then(setRefs).catch(() => {});
+  }, [mode]);
+
+  function applyEan(ean) {
+    const known = refsRef.current.find((r) => r.ean === ean);
+    const label = known ? known.label : EAN_MODELS[ean];
+    setCurrentEan(ean);
+    eanRef.current = ean;
+    if (label) {
+      setModel(label);
+      modelRef.current = label;
+      setFlash({ serial: ean, level: "ok", message: `Référence : ${label}. Scannez maintenant le S/N.` });
+    } else {
+      setModel("");
+      modelRef.current = "";
+      setFlash({
+        serial: ean,
+        level: "warn",
+        message: "Nouvelle référence : tapez son nom dans « Modèle » (ex. Trydan 22 kW câble 5 m) — elle sera retenue pour les prochaines fois.",
+      });
+      setTimeout(() => modelInputRef.current && modelInputRef.current.focus(), 50);
+    }
+    beep(true);
+  }
+
+  // Photo de l'étiquette: lit en une fois le S/N ET le code-barres produit.
+  async function handleLabelPhoto(e) {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    setPhotoBusy(true);
+    try {
+      const { serials, eans } = await readLabel(file);
+      if (eans.length && usesRefs) applyEan(eans[0]);
+      if (!serials.length) {
+        beep(false);
+        setFlash({ serial: "—", level: "error", message: "Aucun numéro de série lu sur la photo : rapprochez-vous de l'étiquette, bien à plat." });
+        return;
+      }
+      for (const sn of serials) await handleScan(sn, sn, { ean: eans[0] || null });
+    } catch (err) {
+      setFlash({ serial: "—", level: "error", message: "Lecture de la photo impossible : " + err.message });
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
 
   useEffect(() => {
     if (mode === "dotation") {
@@ -80,15 +145,11 @@ export default function StockScanPage({ mode }) {
     setModel(MODELS_BY_SUPPLIER[s][0] || "");
   }
 
-  async function handleScan(serial) {
+  async function handleScan(serial, raw, opts = {}) {
     // Code-barres produit (EAN) = référence du modèle, pas un numéro de série
     if (looksLikeProductCode(serial)) {
-      const known = EAN_MODELS[serial];
-      if (mode === "reception" && known) {
-        setModel(known);
-        modelRef.current = known;
-        beep(true);
-        setFlash({ serial, level: "ok", message: `Modèle sélectionné : ${known}. Scannez maintenant le S/N.` });
+      if (usesRefs) {
+        applyEan(serial);
       } else {
         beep(false);
         setFlash({
@@ -104,7 +165,9 @@ export default function StockScanPage({ mode }) {
       setFlash({ serial, level: "error", message: "Déjà scannée" });
       return;
     }
-    const item = { serial, model: modelRef.current, level: "pending", message: "Vérification…" };
+    const ean = usesRefs ? (opts.ean !== undefined ? opts.ean : eanRef.current) : null;
+    const known = ean ? refsRef.current.find((r) => r.ean === ean) : null;
+    const item = { serial, ean, model: known ? known.label : modelRef.current, level: "pending", message: "Vérification…" };
     setItems((prev) => [item, ...prev]);
     try {
       const { charger } = await api.lookupSerial(serial);
@@ -126,6 +189,15 @@ export default function StockScanPage({ mode }) {
     setItems((prev) => prev.map((it) => (it.serial === serial ? { ...it, model: m } : it)));
   }
 
+  // Nom tapé pour une nouvelle référence: appliqué à toutes les bornes de cet EAN
+  function changeModel(m) {
+    setModel(m);
+    modelRef.current = m;
+    if (currentEan && !refs.find((r) => r.ean === currentEan)) {
+      setItems((prev) => prev.map((it) => (it.ean === currentEan ? { ...it, model: m } : it)));
+    }
+  }
+
   const valid = items.filter((it) => it.level === "ok" || it.level === "warn");
   const errors = items.filter((it) => it.level === "error");
   const pending = items.some((it) => it.level === "pending");
@@ -133,7 +205,7 @@ export default function StockScanPage({ mode }) {
   async function submit() {
     setError("");
     if (mode === "dotation" && !technicianId) return setError("Choisissez le technicien");
-    if (mode === "reception" && valid.some((it) => !it.model)) return setError("Indiquez le modèle de chaque borne");
+    if (usesRefs && valid.some((it) => !it.model)) return setError("Indiquez le modèle de chaque borne");
     setSaving(true);
     try {
       const serials = valid.map((it) => it.serial);
@@ -141,9 +213,17 @@ export default function StockScanPage({ mode }) {
         const r = await api.createReception({
           supplier,
           blNumber,
-          items: valid.map((it) => ({ serialNumber: it.serial, model: it.model })),
+          items: valid.map((it) => ({ serialNumber: it.serial, model: it.model, ean: it.ean })),
         });
         setDone({ count: r.count, text: `${r.count} borne(s) entrée(s) en stock${blNumber ? ` — BL ${blNumber}` : ""}` });
+      } else if (mode === "classer") {
+        const withRef = valid.filter((it) => it.ean);
+        if (!withRef.length) {
+          setSaving(false);
+          return setError("Aucune référence lue : photographiez l'étiquette complète (S/N + code-barres produit)");
+        }
+        const r = await api.assignRefs(withRef.map((it) => ({ serialNumber: it.serial, ean: it.ean, label: it.model })));
+        setDone({ count: r.updated, text: `${r.updated} borne(s) classée(s) par référence` });
       } else if (mode === "dotation") {
         const r = await api.createDotation(technicianId, serials);
         setDone({ count: r.count, text: `${r.count} borne(s) remise(s) à ${techName(r.technician)}` });
@@ -175,6 +255,7 @@ export default function StockScanPage({ mode }) {
     setDone(null);
     setBlNumber("");
     setError("");
+    api.getRefs().then(setRefs).catch(() => {});
   }
 
   if (done) {
@@ -211,15 +292,26 @@ export default function StockScanPage({ mode }) {
               N° de BL (optionnel)
               <input value={blNumber} onChange={(e) => setBlNumber(e.target.value)} placeholder="ex. BL-2026-0451" />
             </label>
-            <label className="scan-settings-full">
-              Modèle des bornes scannées
-              <input list="stock-models" value={model} onChange={(e) => setModel(e.target.value)} placeholder="ex. V2C Trydan" />
-              <datalist id="stock-models">
-                {ALL_MODELS.map((m) => <option key={m} value={m} />)}
-              </datalist>
-              <span className="muted">Changez-le en cours de route si le BL contient plusieurs modèles.</span>
-            </label>
           </>
+        )}
+        {usesRefs && (
+          <label className="scan-settings-full">
+            Modèle des bornes scannées{currentEan && <span className="mono"> · EAN {currentEan}</span>}
+            <input
+              ref={modelInputRef}
+              list="stock-models"
+              value={model}
+              onChange={(e) => changeModel(e.target.value)}
+              placeholder="ex. V2C Trydan 22 kW câble 5 m"
+            />
+            <datalist id="stock-models">
+              {[...new Set([...refs.map((r) => r.label), ...ALL_MODELS])].map((m) => <option key={m} value={m} />)}
+            </datalist>
+            <span className="muted">
+              Le plus simple : <strong>📸 photographiez l'étiquette</strong> de chaque carton, le S/N et la référence sont lus
+              ensemble. Au scanner, scannez le code-barres produit puis le S/N.
+            </span>
+          </label>
         )}
         {mode === "dotation" && (
           <label className="scan-settings-full">
@@ -234,6 +326,23 @@ export default function StockScanPage({ mode }) {
           </label>
         )}
       </div>
+
+      <input
+        ref={photoInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        style={{ display: "none" }}
+        onChange={handleLabelPhoto}
+      />
+      <button
+        type="button"
+        className="btn-primary scan-photo-btn"
+        disabled={saving || photoBusy || (mode === "dotation" && !technicianId)}
+        onClick={() => photoInputRef.current && photoInputRef.current.click()}
+      >
+        {photoBusy ? "Lecture de l'étiquette…" : "📸 Photo de l'étiquette (S/N + référence)"}
+      </button>
 
       <Scanner onScan={handleScan} disabled={saving || (mode === "dotation" && !technicianId)} />
 
@@ -255,7 +364,7 @@ export default function StockScanPage({ mode }) {
             <li key={it.serial} className={`scan-item scan-${it.level}`}>
               <div className="scan-item-main">
                 <span className="scan-item-serial">{it.serial}</span>
-                {mode === "reception" ? (
+                {usesRefs ? (
                   <input
                     className="scan-item-model"
                     list="stock-models"
@@ -264,6 +373,10 @@ export default function StockScanPage({ mode }) {
                   />
                 ) : (
                   it.charger && <span className="muted">{it.charger.model}</span>
+                )}
+                {it.ean && <span className="muted mono">EAN {it.ean}</span>}
+                {mode === "classer" && !it.ean && it.level !== "error" && (
+                  <span className="scan-item-msg">Référence non lue : refaites une photo de l'étiquette complète</span>
                 )}
                 {it.message && <span className="scan-item-msg">{it.message}</span>}
               </div>

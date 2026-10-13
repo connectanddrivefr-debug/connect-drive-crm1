@@ -7,6 +7,7 @@ const prisma = require("../lib/prisma");
 const { requireAuth, requireRole } = require("../middleware/auth");
 const { normalizeSerial } = require("../lib/serial");
 const kraaft = require("../integrations/kraaft");
+const { ensureRef } = require("../lib/productRefs");
 
 const router = express.Router();
 router.use(requireAuth);
@@ -314,9 +315,9 @@ router.post("/receptions", async (req, res) => {
     const serialNumber = normalizeSerial(it && it.serialNumber);
     const model = it && it.model ? String(it.model).trim() : "";
     if (!serialNumber || seen.has(serialNumber)) continue;
-    if (!model) return res.status(400).json({ error: `Modèle manquant pour ${serialNumber}` });
+    if (!model && !it.ean && !it.reference) return res.status(400).json({ error: `Modèle manquant pour ${serialNumber}` });
     seen.add(serialNumber);
-    clean.push({ serialNumber, model });
+    clean.push({ serialNumber, model, ean: it.ean || null, reference: it.reference || null });
   }
 
   const existing = await prisma.charger.findMany({
@@ -340,8 +341,16 @@ router.post("/receptions", async (req, res) => {
       },
     });
     for (const c of clean) {
+      const ref = await ensureRef(tx, { ean: c.ean, reference: c.reference, label: c.model, supplier: String(supplier).trim() });
       const charger = await tx.charger.create({
-        data: { serialNumber: c.serialNumber, model: c.model, status: "EN_STOCK", receptionId: r.id },
+        data: {
+          serialNumber: c.serialNumber,
+          model: ref ? ref.label : c.model,
+          ean: ref ? ref.ean : null,
+          reference: ref ? ref.reference : null,
+          status: "EN_STOCK",
+          receptionId: r.id,
+        },
       });
       await tx.stockMovement.create({
         data: {
@@ -439,6 +448,86 @@ router.post("/returns", async (req, res) => {
     }
   }, { timeout: 30000 });
   res.json({ count: serials.length });
+});
+
+// ---------------------------------------------------------------------------
+// Références produit (EAN / code fabricant -> libellé)
+// ---------------------------------------------------------------------------
+router.get("/refs", async (req, res) => {
+  const refs = await prisma.productRef.findMany({ orderBy: { label: "asc" } });
+  const counts = await prisma.charger.groupBy({ by: ["ean", "reference"], _count: { _all: true } });
+  res.json(
+    refs.map((r) => ({
+      ...r,
+      chargers: counts
+        .filter((c) => (r.ean && c.ean === r.ean) || (r.reference && c.reference === r.reference))
+        .reduce((n, c) => n + c._count._all, 0),
+    }))
+  );
+});
+
+router.post("/refs", async (req, res) => {
+  const { ean, reference, label, supplier } = req.body || {};
+  const ref = await ensureRef(prisma, { ean, reference, label, supplier });
+  if (!ref) return res.status(400).json({ error: "EAN ou référence fabricant requis" });
+  res.status(201).json(ref);
+});
+
+// Renommer une référence: met aussi à jour le modèle affiché des bornes concernées.
+router.patch("/refs/:id", async (req, res) => {
+  const label = req.body && req.body.label ? String(req.body.label).trim() : "";
+  if (!label) return res.status(400).json({ error: "Libellé requis" });
+  const ref = await prisma.productRef.update({ where: { id: req.params.id }, data: { label } }).catch(() => null);
+  if (!ref) return res.status(404).json({ error: "Référence introuvable" });
+  const or = [ref.ean && { ean: ref.ean }, ref.reference && { reference: ref.reference }].filter(Boolean);
+  if (or.length) await prisma.charger.updateMany({ where: { OR: or }, data: { model: label } });
+  res.json(ref);
+});
+
+// GET /api/stock/serials — tous les numéros connus (classement par BL)
+router.get("/serials", async (req, res) => {
+  const chargers = await prisma.charger.findMany({
+    select: { id: true, serialNumber: true, model: true, ean: true, reference: true, status: true },
+  });
+  res.json(chargers);
+});
+
+// POST /api/stock/chargers/assign-refs { items: [{ serialNumber, ean?, reference?, label? }] }
+// Classement de bornes déjà enregistrées par référence (depuis un BL ou une
+// photo d'étiquette). Trace un mouvement CORRECTION par borne modifiée.
+router.post("/chargers/assign-refs", async (req, res) => {
+  const items = Array.isArray(req.body && req.body.items) ? req.body.items : [];
+  if (!items.length) return res.status(400).json({ error: "Aucune borne à classer" });
+  let updated = 0;
+  const notFound = [];
+  for (const it of items) {
+    const serialNumber = normalizeSerial(it.serialNumber);
+    const charger = serialNumber ? await prisma.charger.findUnique({ where: { serialNumber } }) : null;
+    if (!charger) {
+      notFound.push(it.serialNumber);
+      continue;
+    }
+    const ref = await ensureRef(prisma, { ean: it.ean, reference: it.reference, label: it.label });
+    if (!ref) continue;
+    if (charger.ean === ref.ean && charger.reference === ref.reference && charger.model === ref.label) continue;
+    await prisma.$transaction([
+      prisma.charger.update({
+        where: { id: charger.id },
+        data: { ean: ref.ean || charger.ean, reference: ref.reference || charger.reference, model: ref.label },
+      }),
+      prisma.stockMovement.create({
+        data: {
+          chargerId: charger.id,
+          type: "CORRECTION",
+          userId: req.user.id,
+          source: it.source === "BL" ? "BL" : "CRM",
+          notes: `Référence: ${charger.model} → ${ref.label}${ref.reference ? ` (${ref.reference})` : ""}`,
+        },
+      }),
+    ]);
+    updated++;
+  }
+  res.json({ updated, notFound });
 });
 
 // ---------------------------------------------------------------------------

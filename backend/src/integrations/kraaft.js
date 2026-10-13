@@ -17,6 +17,7 @@
 //   KRAAFT_OWNER_USER_ID   optionnel: ID Kraaft de Julien, ajouté à chaque conversation
 const prisma = require("../lib/prisma");
 const { normalizeSerial } = require("../lib/serial");
+const { ensureRef, cleanEan } = require("../lib/productRefs");
 
 const API = "https://api.kraaft.co/v1";
 const OWNER_USER_ID = process.env.KRAAFT_OWNER_USER_ID || "CGrWcMDlllZScWW78Gn3RAC5pX52";
@@ -181,6 +182,9 @@ async function autoCorrectTechnicianIds(senderIds) {
 async function handleCodes({ codes, event, lead }) {
   let matched = 0;
   const seen = new Set();
+  // Code-barres produit (EAN) photographié avec le S/N: complète la référence
+  // de la borne si elle n'était pas encore connue.
+  const photoEan = codes.map(cleanEan).find(Boolean) || null;
   for (const raw of codes) {
     const code = normalizeSerial(raw);
     if (!code || seen.has(code) || /^\d{8,14}$/.test(code)) continue; // ignore EAN produit
@@ -202,6 +206,16 @@ async function handleCodes({ codes, event, lead }) {
         note = "Borne déjà enregistrée comme installée chez un autre client";
       } else {
         status = "RATTACHEE";
+        if (photoEan && !charger.ean) {
+          // référence inconnue: créée avec le modèle actuel de la borne comme nom
+          const ref = await ensureRef(prisma, { ean: photoEan, label: charger.model });
+          if (ref) {
+            await prisma.charger.update({
+              where: { id: charger.id },
+              data: { ean: ref.ean, reference: ref.reference || charger.reference, model: ref.label },
+            });
+          }
+        }
         if (!(charger.status === "INSTALLEE" && charger.leadId === lead.id)) {
           await prisma.$transaction([
             prisma.charger.update({

@@ -22,6 +22,23 @@ export default function StockPage() {
   const [createdUser, setCreatedUser] = useState(null);
   const [userError, setUserError] = useState("");
   const [kraaft, setKraaft] = useState(null);
+  const [refs, setRefs] = useState([]);
+
+  async function loadRefs() {
+    setRefs(await api.getRefs());
+  }
+
+  async function renameRef(r, label) {
+    const v = label.trim();
+    if (!v || v === r.label) return;
+    try {
+      await api.updateRef(r.id, v);
+      await loadRefs();
+      reloadAll();
+    } catch (e) {
+      setError(e.message);
+    }
+  }
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState("");
 
@@ -95,6 +112,7 @@ export default function StockPage() {
     loadSummary().catch((e) => setError(e.message));
     loadStockUsers().catch(() => {});
     loadKraaft().catch(() => {});
+    loadRefs().catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -142,6 +160,8 @@ export default function StockPage() {
           <Link to="/stock/reception" className="btn-primary">+ Réception</Link>
           <Link to="/stock/dotation" className="btn-primary">Remettre à un technicien</Link>
           <Link to="/stock/retour" className="btn-ghost">Retour au dépôt</Link>
+          <Link to="/stock/bl" className="btn-ghost">📄 Classer avec un BL</Link>
+          <Link to="/stock/classer" className="btn-ghost">📸 Classer par étiquettes</Link>
         </div>
       </div>
 
@@ -339,6 +359,22 @@ export default function StockPage() {
             </form>
           )}
         </div>
+      </div>
+
+      <div className="card stock-access-card">
+        <h3>Références produit</h3>
+        <p className="muted">
+          Chaque référence (code-barres produit du carton / code fabricant) a un nom lisible. Elles s'ajoutent toutes seules à la
+          réception ou avec un BL ; renommez-les ici (le nom est mis à jour sur toutes les bornes concernées).
+        </p>
+        {refs.length === 0 && <p className="muted">Aucune référence enregistrée.</p>}
+        {refs.map((r) => (
+          <div key={r.id} className="ref-row">
+            <input defaultValue={r.label} onBlur={(e) => renameRef(r, e.target.value)} />
+            <span className="mono">{[r.reference, r.ean].filter(Boolean).join(" · ")}</span>
+            <span className="muted">{r.chargers} borne(s)</span>
+          </div>
+        ))}
       </div>
 
       {isAdmin && (

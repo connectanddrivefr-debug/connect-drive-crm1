@@ -455,3 +455,16 @@ main { padding: 24px; max-width: 1400px; margin: 0 auto; }
 .kraaft-head h3 { margin: 0; }
 .kraaft-scan { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
 .kraaft-scan:last-child { border-bottom: none; }
+
+.scan-photo-btn { width: 100%; padding: 14px; font-size: 16px; margin-bottom: 8px; }
+
+.bl-group { margin-bottom: 12px; }
+.bl-group-head { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; font-weight: 600; }
+.bl-group-head .count { margin-left: auto; color: var(--muted); font-weight: 400; }
+.bl-label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+.bl-label input { padding: 9px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 15px; color: var(--text); }
+.bl-serials { display: flex; flex-direction: column; gap: 3px; font-size: 13px; }
+.bl-raw { white-space: pre-wrap; font-size: 12px; background: #f8fafc; border: 1px solid var(--border); border-radius: 6px; padding: 10px; max-height: 300px; overflow: auto; }
+.ref-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+.ref-row input { flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid var(--border); border-radius: 5px; }
+.ref-row .mono { font-size: 12px; color: var(--muted); white-space: nowrap; }

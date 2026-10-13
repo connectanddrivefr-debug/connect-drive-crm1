@@ -120,7 +120,7 @@ export default function Scanner({ onScan, disabled = false }) {
     <div className="scanner">
       <div id={regionId.current} className={`scanner-view ${cameraOn ? "on" : ""}`} />
       {!cameraOn ? (
-        <button type="button" className="btn-primary scanner-start" onClick={startCamera} disabled={disabled}>
+        <button type="button" className="btn-ghost scanner-start" onClick={startCamera} disabled={disabled}>
           📷 Ouvrir la caméra et scanner
         </button>
       ) : (
