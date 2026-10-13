@@ -110,6 +110,7 @@ export default function ContactDetailPage() {
   const [visitSlots, setVisitSlots] = useState("");
   const [visitDate, setVisitDate] = useState("");
   const [installationDate, setInstallationDate] = useState("");
+  const [callbackDate, setCallbackDate] = useState("");
   const [depositAmountInput, setDepositAmountInput] = useState("");
   const [balanceAmountInput, setBalanceAmountInput] = useState("");
   const [paymentLoading, setPaymentLoading] = useState(null); // "deposit" | "balance" | null
@@ -134,7 +135,8 @@ export default function ContactDetailPage() {
     setVisitSlots(lead.technicalVisitSlots || "");
     setVisitDate(toDatetimeLocal(lead.technicalVisitDate));
     setInstallationDate(toDatetimeLocal(lead.installationDate));
-  }, [lead?.id, lead?.technicalVisitSlots, lead?.technicalVisitDate, lead?.installationDate]);
+    setCallbackDate(toDatetimeLocal(lead.callbackDate));
+  }, [lead?.id, lead?.technicalVisitSlots, lead?.technicalVisitDate, lead?.installationDate, lead?.callbackDate]);
 
   async function changeVisitStatus(status) {
     await api.updateLead(id, { technicalVisitStatus: status });
@@ -155,6 +157,12 @@ export default function ContactDetailPage() {
 
   async function toggleCallback(checked) {
     await api.updateLead(id, { callbackRequested: checked });
+    load();
+  }
+
+  async function saveCallbackDate(e) {
+    e.preventDefault();
+    await api.updateLead(id, { callbackDate: callbackDate ? new Date(callbackDate).toISOString() : null });
     load();
   }
 
@@ -563,6 +571,17 @@ export default function ContactDetailPage() {
               />
               Client à rappeler
             </label>
+
+            {lead.callbackRequested && (
+              <form onSubmit={saveCallbackDate} className="inline-form">
+                <input
+                  type="datetime-local"
+                  value={callbackDate}
+                  onChange={(e) => setCallbackDate(e.target.value)}
+                />
+                <button type="submit" className="btn-primary">Enregistrer</button>
+              </form>
+            )}
 
             <div className="info-field">
               <span className="info-label">Photos</span>

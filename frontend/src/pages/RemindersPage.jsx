@@ -136,10 +136,20 @@ export default function RemindersPage() {
             {data.clientsARappeler.length === 0 && <p className="muted">Aucun rappel en attente.</p>}
             {data.clientsARappeler.map((lead) => (
               <ReminderCard key={lead.id} lead={lead}>
-                {lead.callbackRequestedAt && (
-                  <div className="reminder-card-date">
-                    Demandé le {new Date(lead.callbackRequestedAt).toLocaleDateString("fr-FR")}
+                {lead.callbackDate ? (
+                  <div
+                    className="reminder-card-date"
+                    style={new Date(lead.callbackDate) < new Date() ? { color: "#c0392b", fontWeight: 600 } : undefined}
+                  >
+                    {new Date(lead.callbackDate) < new Date() ? "En retard — " : ""}
+                    À rappeler le {new Date(lead.callbackDate).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}
                   </div>
+                ) : (
+                  lead.callbackRequestedAt && (
+                    <div className="reminder-card-date">
+                      Demandé le {new Date(lead.callbackRequestedAt).toLocaleDateString("fr-FR")} — pas d'heure fixée
+                    </div>
+                  )
                 )}
               </ReminderCard>
             ))}

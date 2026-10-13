@@ -277,7 +277,11 @@ export default function KanbanPage() {
                         {lead.isProfessional && <span className="badge badge-pro">Pro</span>}
                         {lead.technicalVisitStatus === "PROGRAMMEE" && <span className="badge badge-rappel">Visite prog.</span>}
                         {lead.technicalVisitStatus === "A_PROGRAMMER" && <span className="badge badge-rappel">Visite à prog.</span>}
-                        {lead.callbackRequested && <span className="badge badge-rappel">À rappeler</span>}
+                        {lead.callbackRequested && (
+                          <span className="badge badge-rappel">
+                            À rappeler{lead.callbackDate ? ` ${new Date(lead.callbackDate).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}` : ""}
+                          </span>
+                        )}
                         {lead.photosStatus === "EN_ATTENTE" && <span className="badge badge-rappel">Photos</span>}
                         {lead.installationStatus === "PROGRAMMEE" && <span className="badge badge-rappel">Install. prog.</span>}
                         {lead.depositStatus === "PAYE" && <span className="badge badge-payment-paye">Acompte payé</span>}

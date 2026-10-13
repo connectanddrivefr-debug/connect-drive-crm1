@@ -44,7 +44,15 @@ router.get("/", async (req, res) => {
   res.json({
     visitesProgrammees: leads.filter((l) => l.status !== "SIGNE" && l.technicalVisitStatus === "PROGRAMMEE"),
     visitesAProgrammer: leads.filter((l) => l.status !== "SIGNE" && l.technicalVisitStatus === "A_PROGRAMMER"),
-    clientsARappeler: leads.filter((l) => l.status !== "SIGNE" && l.callbackRequested),
+    // Triés par date de rappel prévue (les plus urgents d'abord), ceux sans date à la fin.
+    clientsARappeler: leads
+      .filter((l) => l.status !== "SIGNE" && l.callbackRequested)
+      .sort((a, b) => {
+        if (a.callbackDate && b.callbackDate) return new Date(a.callbackDate) - new Date(b.callbackDate);
+        if (a.callbackDate) return -1;
+        if (b.callbackDate) return 1;
+        return 0;
+      }),
     photosEnAttente: leads.filter((l) => l.status !== "SIGNE" && l.photosStatus === "EN_ATTENTE"),
     installationsProgrammees: leads.filter((l) => l.installationStatus === "PROGRAMMEE"),
   });

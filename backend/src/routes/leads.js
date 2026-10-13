@@ -198,7 +198,7 @@ router.patch("/:id", async (req, res) => {
     firstName, lastName, email, phone, address, postalCode, city,
     sourceDetail, isProfessional, company, notesText, assignedToId,
     technicalVisitStatus, technicalVisitDate, technicalVisitSlots,
-    callbackRequested, photosStatus,
+    callbackRequested, callbackDate, photosStatus,
     installationStatus, installationDate,
     phoneVerified, installTechnicianId,
   } = req.body;
@@ -236,7 +236,11 @@ router.patch("/:id", async (req, res) => {
     }
     if (!callbackRequested) {
       rappelData.callbackRequestedAt = null;
+      rappelData.callbackDate = null; // plus de rappel -> plus de date prévue
     }
+  }
+  if (callbackDate !== undefined && callbackRequested !== false) {
+    rappelData.callbackDate = callbackDate ? new Date(callbackDate) : null;
   }
   if (photosStatus !== undefined) {
     rappelData.photosStatus = photosStatus;

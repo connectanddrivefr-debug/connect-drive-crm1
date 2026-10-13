@@ -156,6 +156,7 @@ model Lead {
 
   callbackRequested   Boolean   @default(false) // "client à rappeler"
   callbackRequestedAt DateTime?
+  callbackDate        DateTime? // date/heure prévue du rappel (choisie à la main)
 
   photosStatus         PhotosStatus @default(NON_DEMANDEES)
   photosRequestedAt    DateTime?
