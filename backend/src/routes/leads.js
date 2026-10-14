@@ -123,6 +123,81 @@ router.get("/backfill-signed-at", requireRole("ADMIN"), async (req, res) => {
   res.json({ ok: true, updated });
 });
 
+// Réduit un numéro saisi à la partie significative pour la comparaison,
+// quel que soit le format enregistré en base ou tapé au téléphone:
+// "06 58 48 47 70", "+33 6 58 48 47 70", "0033658484770", "+212 6..." etc.
+// Les numéros FR et MA ont 9 chiffres significatifs après l'indicatif / le 0:
+// on garde donc les 9 derniers chiffres. Pour une saisie partielle (< 9
+// chiffres), on retire seulement le 0 initial pour matcher aussi les
+// numéros enregistrés au format international.
+function phoneSearchKey(input) {
+  const digits = String(input || "").replace(/\D/g, "");
+  if (digits.length >= 9) return digits.slice(-9);
+  return digits.replace(/^0+/, "");
+}
+
+// GET /api/leads/search?q= — recherche rapide (barre de recherche du haut),
+// typiquement quand un client appelle: par numéro de téléphone (tous
+// formats), nom, prénom, email, société ou code postal. Contrairement au
+// pipeline, inclut tous les statuts (Perdu compris) et les numéros non
+// vérifiés, pour toujours retrouver un lead existant et éviter les doublons.
+// Un commercial ne voit que ses propres leads (même règle que GET /).
+router.get("/search", async (req, res) => {
+  const q = String(req.query.q || "").trim();
+  if (q.length < 2) return res.json([]);
+
+  const or = [];
+  const phoneKey = phoneSearchKey(q);
+  const looksLikePhone = /^[\d\s+().\-/]+$/.test(q);
+
+  if (looksLikePhone && phoneKey.length >= 4) {
+    // Comparaison sur les chiffres seuls du numéro enregistré (espaces,
+    // points, "+33" ignorés) — impossible avec un simple "contains" Prisma.
+    const rows = await prisma.$queryRaw`
+      SELECT id FROM "Lead"
+      WHERE regexp_replace(COALESCE(phone, ''), '[^0-9]', '', 'g') LIKE ${"%" + phoneKey + "%"}
+      LIMIT 50`;
+    if (rows.length) or.push({ id: { in: rows.map((r) => r.id) } });
+  }
+
+  if (!looksLikePhone) {
+    // Recherche texte: chaque mot doit apparaître dans au moins un champ,
+    // pour que "jean dupont" trouve prénom + nom.
+    const words = q.split(/\s+/).filter(Boolean);
+    or.push({
+      AND: words.map((w) => ({
+        OR: [
+          { firstName: { contains: w, mode: "insensitive" } },
+          { lastName: { contains: w, mode: "insensitive" } },
+          { email: { contains: w, mode: "insensitive" } },
+          { company: { contains: w, mode: "insensitive" } },
+          { city: { contains: w, mode: "insensitive" } },
+        ],
+      })),
+    });
+  } else if (/^\d{5}$/.test(q)) {
+    or.push({ postalCode: q });
+  }
+
+  if (!or.length) return res.json([]);
+
+  const filters = [{ OR: or }];
+  if (req.user.role === "COMMERCIAL") filters.push({ assignedToId: req.user.id });
+
+  const leads = await prisma.lead.findMany({
+    where: { AND: filters },
+    orderBy: { updatedAt: "desc" },
+    take: 15,
+    select: {
+      id: true, firstName: true, lastName: true, email: true, phone: true,
+      company: true, city: true, postalCode: true, status: true, source: true,
+      phoneVerified: true, updatedAt: true,
+      assignedTo: { select: { firstName: true, lastName: true } },
+    },
+  });
+  res.json(leads);
+});
+
 // GET /api/leads/:id (fiche contact complète)
 router.get("/:id", async (req, res) => {
   const lead = await prisma.lead.findUnique({

@@ -1,6 +1,7 @@
 import { Suspense, lazy } from "react";
 import { Routes, Route, Navigate, Link, useNavigate } from "react-router-dom";
 import { getToken, getCurrentUser } from "./api/client";
+import LeadSearch from "./components/LeadSearch";
 
 // Chaque page dans son propre chunk: évite de charger tout le CRM en un
 // seul gros bundle JS au premier écran (temps de chargement initial réduit).
@@ -48,6 +49,7 @@ function Layout({ children }) {
           {(role === "ADMIN" || role === "LOGISTIQUE") && <Link to="/stock">Stock</Link>}
           {role !== "LOGISTIQUE" && <Link to="/dashboard">Tableau de bord</Link>}
         </nav>
+        {role !== "LOGISTIQUE" && <LeadSearch />}
         {getToken() && (
           <button className="btn-ghost" onClick={logout}>
             Déconnexion

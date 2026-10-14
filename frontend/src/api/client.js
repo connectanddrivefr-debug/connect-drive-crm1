@@ -41,6 +41,8 @@ export const api = {
     const qs = new URLSearchParams(params).toString();
     return request(`/leads${qs ? `?${qs}` : ""}`);
   },
+  // Recherche rapide (barre du haut): téléphone tous formats, nom, email…
+  searchLeads: (q) => request(`/leads/search?q=${encodeURIComponent(q)}`),
   getLead: (id) => request(`/leads/${id}`),
   createLead: (data) => request("/leads", { method: "POST", body: data }),
   updateLead: (id, data) => request(`/leads/${id}`, { method: "PATCH", body: data }),
