@@ -66,6 +66,15 @@ function getClient() {
 }
 
 async function sendEmail({ to, subject, htmlContent, leadId, type, senderName, senderEmail, replyTo }) {
+  // Clients créés depuis la gestion de stock: jamais d'email client automatique
+  // (les notifications internes à l'équipe restent envoyées).
+  if (leadId) {
+    const lead = await prisma.lead.findUnique({ where: { id: leadId }, select: { noAutoEmails: true, email: true } });
+    if (lead && lead.noAutoEmails && to && lead.email && to.toLowerCase() === lead.email.toLowerCase()) {
+      console.log(`[Brevo] email "${type}" non envoyé: client créé depuis le stock (noAutoEmails)`);
+      return;
+    }
+  }
   if (!process.env.BREVO_API_KEY) {
     console.warn(`[Brevo] BREVO_API_KEY absent — email "${type}" non envoyé (mode simulation).`);
     if (leadId) {

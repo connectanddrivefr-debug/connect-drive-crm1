@@ -508,3 +508,10 @@ main { padding: 24px; max-width: 1400px; margin: 0 auto; }
   .topbar { flex-wrap: wrap; gap: 12px; }
   .lead-search { order: 10; width: 100%; }
 }
+
+.install-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+.new-client-form { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.new-client-form .full { grid-column: 1 / -1; }
+.new-client-form input, .new-client-form select { padding: 8px 9px; border: 1px solid var(--border); border-radius: 6px; min-width: 0; }
+.new-client-form label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+.new-client-form p { margin: 2px 0; }

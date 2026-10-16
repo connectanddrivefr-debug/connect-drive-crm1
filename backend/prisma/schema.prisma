@@ -132,6 +132,14 @@ model Lead {
   // et apparaît séparément dans la section "Numéros non vérifiés" (suspicion
   // de spam) — voir GET /api/leads/unverified.
   phoneVerified   Boolean   @default(true)
+
+  // Fiche créée depuis la gestion de stock (client oublié, ou client d'un
+  // technicien partenaire à qui on a vendu la borne): AUCUN email automatique
+  // n'est jamais envoyé à ce client (voir integrations/brevo.js sendEmail).
+  noAutoEmails    Boolean   @default(false)
+  // Technicien partenaire qui a acheté la borne et l'a posée chez SON client.
+  partnerTechnician   Technician? @relation("PartnerClients", fields: [partnerTechnicianId], references: [id])
+  partnerTechnicianId String?
   phoneVerifiedAt DateTime?
 
   source        LeadSource @default(MANUEL)
@@ -353,6 +361,7 @@ model Technician {
   chargers       Charger[]
   stockMovements StockMovement[]
   leadsToInstall Lead[] @relation("LeadInstallTechnician")
+  partnerClients Lead[] @relation("PartnerClients")
 }
 
 enum ChargerStatus {

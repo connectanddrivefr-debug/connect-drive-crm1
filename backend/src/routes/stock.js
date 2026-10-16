@@ -271,13 +271,53 @@ router.patch("/chargers/:id", async (req, res) => {
 
 // POST /api/stock/chargers/:id/install { leadId, technicianId? }
 // Rattachement manuel à un client (en attendant l'intégration Kraaft).
+// Body: { leadId } pour un client existant, ou { newClient: {...}, partnerTechnicianId? }
+// pour créer une fiche client sans passer par le pipeline: AUCUN email n'est
+// envoyé (création directe en base, noAutoEmails=true).
 router.post("/chargers/:id/install", async (req, res) => {
-  const { leadId, notes } = req.body || {};
+  const { leadId, notes, newClient, partnerTechnicianId } = req.body || {};
   const charger = await prisma.charger.findUnique({ where: { id: req.params.id } });
   if (!charger) return res.status(404).json({ error: "Borne introuvable" });
-  const lead = leadId ? await prisma.lead.findUnique({ where: { id: leadId } }) : null;
-  if (!lead) return res.status(400).json({ error: "Client introuvable" });
-  const technicianId = req.body.technicianId || charger.technicianId || null;
+
+  let partner = null;
+  if (partnerTechnicianId) {
+    partner = await prisma.technician.findUnique({ where: { id: partnerTechnicianId } });
+    if (!partner) return res.status(400).json({ error: "Technicien partenaire introuvable" });
+  }
+
+  let lead = null;
+  if (newClient) {
+    const t = (v) => (v && String(v).trim()) || null;
+    if (!t(newClient.lastName) && !t(newClient.firstName) && !t(newClient.company)) {
+      return res.status(400).json({ error: "Nom du client (ou entreprise) requis" });
+    }
+    const partnerName = partner ? `${partner.firstName}${partner.lastName ? " " + partner.lastName : ""}` : null;
+    lead = await prisma.lead.create({
+      data: {
+        firstName: t(newClient.firstName),
+        lastName: t(newClient.lastName),
+        company: t(newClient.company),
+        isProfessional: Boolean(t(newClient.company)),
+        email: t(newClient.email) || "",
+        phone: t(newClient.phone),
+        address: t(newClient.address),
+        postalCode: t(newClient.postalCode),
+        city: t(newClient.city),
+        source: "MANUEL",
+        sourceDetail: partner ? `Client de ${partnerName} (vente partenaire)` : "Ajout depuis le stock",
+        status: "SIGNE",
+        signedAt: new Date(),
+        noAutoEmails: true,
+        partnerTechnicianId: partner ? partner.id : null,
+        notesText: t(newClient.notes),
+        statusHistory: { create: { toStatus: "SIGNE", changedBy: req.user.email || req.user.id } },
+      },
+    });
+  } else {
+    lead = leadId ? await prisma.lead.findUnique({ where: { id: leadId } }) : null;
+    if (!lead) return res.status(400).json({ error: "Client introuvable" });
+  }
+  const technicianId = (partner && partner.id) || req.body.technicianId || charger.technicianId || null;
 
   const updated = await prisma.$transaction(async (tx) => {
     const u = await tx.charger.update({
@@ -292,12 +332,12 @@ router.post("/chargers/:id/install", async (req, res) => {
         technicianId,
         userId: req.user.id,
         source: "CRM",
-        notes: notes || null,
+        notes: notes || (partner ? "Borne vendue au technicien partenaire, posée chez son client" : null),
       },
     });
     return u;
   });
-  res.json(updated);
+  res.json({ ...updated, lead: { id: lead.id } });
 });
 
 // ---------------------------------------------------------------------------

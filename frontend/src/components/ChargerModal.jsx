@@ -15,6 +15,11 @@ export default function ChargerModal({ chargerId, onClose, onChanged }) {
   const [model, setModel] = useState("");
   const [serial, setSerial] = useState("");
   const [busy, setBusy] = useState(false);
+  const [newMode, setNewMode] = useState(false);
+  const [techs, setTechs] = useState([]);
+  const emptyClient = { firstName: "", lastName: "", company: "", phone: "", email: "", address: "", postalCode: "", city: "" };
+  const [nc, setNc] = useState(emptyClient);
+  const [partnerId, setPartnerId] = useState("");
 
   async function load() {
     const data = await api.getCharger(chargerId);
@@ -46,8 +51,10 @@ export default function ChargerModal({ chargerId, onClose, onChanged }) {
       await load();
       setPanel(null);
       onChanged && onChanged();
+      return true;
     } catch (e) {
       setError(e.message);
+      return false;
     } finally {
       setBusy(false);
     }
@@ -118,6 +125,61 @@ export default function ChargerModal({ chargerId, onClose, onChanged }) {
 
             {panel === "install" && (
               <div className="charger-panel">
+                <div className="install-tabs">
+                  <button className={!newMode ? "status-pill active" : "status-pill"} onClick={() => setNewMode(false)}>
+                    Client existant
+                  </button>
+                  <button
+                    className={newMode ? "status-pill active" : "status-pill"}
+                    onClick={() => {
+                      setNewMode(true);
+                      if (!techs.length) api.getTechnicians().then((l) => setTechs(l.filter((t) => t.active))).catch(() => {});
+                    }}
+                  >
+                    + Nouveau client
+                  </button>
+                </div>
+                {newMode ? (
+                  <form
+                    className="new-client-form"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      run(() => api.installCharger(c.id, { newClient: nc, partnerTechnicianId: partnerId || null })).then((ok) => {
+                        if (!ok) return;
+                        setNc(emptyClient);
+                        setPartnerId("");
+                        setNewMode(false);
+                      });
+                    }}
+                  >
+                    <label className="full">
+                      Installée chez le client de… (optionnel)
+                      <select value={partnerId} onChange={(e) => setPartnerId(e.target.value)}>
+                        <option value="">— Notre client (pas un client de technicien) —</option>
+                        {techs.map((t) => (
+                          <option key={t.id} value={t.id}>Client de {t.firstName} {t.lastName || ""}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <input placeholder="Prénom" value={nc.firstName} onChange={(e) => setNc({ ...nc, firstName: e.target.value })} />
+                    <input placeholder="Nom *" value={nc.lastName} onChange={(e) => setNc({ ...nc, lastName: e.target.value })} />
+                    <input className="full" placeholder="Entreprise (si pro)" value={nc.company} onChange={(e) => setNc({ ...nc, company: e.target.value })} />
+                    <input placeholder="Téléphone" value={nc.phone} onChange={(e) => setNc({ ...nc, phone: e.target.value })} />
+                    <input type="email" placeholder="Email (optionnel)" value={nc.email} onChange={(e) => setNc({ ...nc, email: e.target.value })} />
+                    <input className="full" placeholder="Adresse" value={nc.address} onChange={(e) => setNc({ ...nc, address: e.target.value })} />
+                    <input placeholder="Code postal" value={nc.postalCode} onChange={(e) => setNc({ ...nc, postalCode: e.target.value })} />
+                    <input placeholder="Ville" value={nc.city} onChange={(e) => setNc({ ...nc, city: e.target.value })} />
+                    <p className="muted full">🔕 Aucun email ne sera envoyé à ce client. Une fiche client « Signé » est créée dans le CRM.</p>
+                    <button
+                      type="submit"
+                      className="btn-primary full"
+                      disabled={busy || (!nc.lastName.trim() && !nc.firstName.trim() && !nc.company.trim())}
+                    >
+                      Créer la fiche et marquer la borne installée
+                    </button>
+                  </form>
+                ) : (
+                <>
                 <label>
                   Rechercher le client (nom, entreprise, ville, code postal)
                   <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="ex. Dupont" />
@@ -133,8 +195,17 @@ export default function ChargerModal({ chargerId, onClose, onChanged }) {
                       {leadLabel(l)}
                     </button>
                   ))}
-                  {q.trim().length >= 2 && leads.length === 0 && <span className="muted">Aucun client trouvé.</span>}
+                  {q.trim().length >= 2 && leads.length === 0 && (
+                    <span className="muted">
+                      Aucun client trouvé.{" "}
+                      <button className="btn-link" onClick={() => { setNewMode(true); setNc({ ...emptyClient, lastName: q.trim() }); api.getTechnicians().then((l) => setTechs(l.filter((t) => t.active))).catch(() => {}); }}>
+                        Le créer
+                      </button>
+                    </span>
+                  )}
                 </div>
+                </>
+                )}
               </div>
             )}
 
