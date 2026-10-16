@@ -446,6 +446,22 @@ router.patch("/:id/status", async (req, res) => {
     }
   }
 
+  // Signal intermédiaire pour Meta: le devis a été envoyé. Plus fréquent que
+  // la signature (donc assez de volume pour que Meta optimise dessus) tout en
+  // restant bien plus qualifié qu'un simple remplissage du simulateur.
+  // Envoyé à l'entrée dans DEVIS_ENVOYE seulement; l'event_id est stable par
+  // lead (voir metaConversions.js), donc un retour en arrière puis un nouveau
+  // passage ne sera pas compté deux fois par Meta.
+  if (status === "DEVIS_ENVOYE" && current.status !== "DEVIS_ENVOYE") {
+    const latestQuote = lead.quotes[0];
+    const value = latestQuote ? Number(latestQuote.amount) : (lead.estimatedPrice ? Number(lead.estimatedPrice) : undefined);
+    try {
+      await sendMetaConversionEvent("QuoteSent", lead, value ? { value, currency: "EUR" } : {});
+    } catch (err) {
+      console.error("[MetaCAPI] échec envoi événement devis envoyé:", err.message);
+    }
+  }
+
   res.json(lead);
 });
 
