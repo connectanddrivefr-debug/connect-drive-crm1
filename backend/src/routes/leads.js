@@ -12,7 +12,7 @@ const { ensureRoomForLead } = require("../integrations/kraaft");
 const router = express.Router();
 router.use(requireAuth);
 
-const VALID_STATUSES = ["NOUVEAU", "CONTACTE", "DEVIS_ENVOYE", "SIGNE", "PERDU"];
+const VALID_STATUSES = ["NOUVEAU", "CONTACTE", "DEVIS_ENVOYE", "EN_ATTENTE", "SIGNE", "PERDU"];
 
 // GET /api/leads?status=&source=&q=
 router.get("/", async (req, res) => {
@@ -397,7 +397,7 @@ router.delete("/:id", requireRole("ADMIN"), async (req, res) => {
 
 // PATCH /api/leads/:id/status  (déplacement dans le pipeline kanban)
 router.patch("/:id/status", async (req, res) => {
-  const { status } = req.body;
+  const { status, onHoldReason, onHoldUntil } = req.body;
   if (!VALID_STATUSES.includes(status)) {
     return res.status(400).json({ error: `Statut invalide. Valeurs possibles: ${VALID_STATUSES.join(", ")}` });
   }
@@ -414,6 +414,28 @@ router.patch("/:id/status", async (req, res) => {
       // si le lead en ressort (ex: erreur, réouverture du dossier).
       ...(status === "SIGNE" && current.status !== "SIGNE" ? { signedAt: new Date() } : {}),
       ...(status !== "SIGNE" && current.status === "SIGNE" ? { signedAt: null } : {}),
+      // Projet en attente : on mémorise le motif et la date de reprise. Si une
+      // date est donnée, le lead remonte dans "Clients à rappeler" (Rappels)
+      // à cette date. Les relances devis s'arrêtent d'elles-mêmes (le job ne
+      // traite que DEVIS_ENVOYE). Repasser en DEVIS_ENVOYE relance une
+      // séquence complète.
+      ...(status === "EN_ATTENTE"
+        ? {
+            onHoldReason: onHoldReason !== undefined ? (onHoldReason || null) : current.onHoldReason,
+            onHoldUntil: onHoldUntil !== undefined ? (onHoldUntil ? new Date(onHoldUntil) : null) : current.onHoldUntil,
+            onHoldAt: current.status === "EN_ATTENTE" ? current.onHoldAt : new Date(),
+            ...(onHoldUntil
+              ? {
+                  callbackRequested: true,
+                  callbackRequestedAt: current.callbackRequestedAt || new Date(),
+                  callbackDate: new Date(onHoldUntil),
+                }
+              : {}),
+          }
+        : {}),
+      ...(status !== "EN_ATTENTE" && current.status === "EN_ATTENTE"
+        ? { onHoldReason: null, onHoldUntil: null, onHoldAt: null }
+        : {}),
       // (Re)démarre la séquence de relance devis à l'entrée en DEVIS_ENVOYE.
       ...(status === "DEVIS_ENVOYE" && current.status !== "DEVIS_ENVOYE"
         ? { quoteFollowupStartedAt: new Date(), quoteFollowupStep: 0, quoteFollowupLastAt: null }

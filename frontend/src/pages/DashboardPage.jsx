@@ -19,6 +19,7 @@ const STATUS_LABELS = {
   NOUVEAU: "Nouveau",
   CONTACTE: "Contacté",
   DEVIS_ENVOYE: "Devis envoyé",
+  EN_ATTENTE: "En attente",
   SIGNE: "Signé",
   PERDU: "Perdu",
 };
@@ -26,6 +27,7 @@ const STATUS_COLORS = {
   NOUVEAU: "#5b8fe0",
   CONTACTE: "#f59e0b",
   DEVIS_ENVOYE: "#8b5cf6",
+  EN_ATTENTE: "#64748b",
   SIGNE: "#16a34a",
   PERDU: "#dc2626",
 };

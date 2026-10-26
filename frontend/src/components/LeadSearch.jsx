@@ -6,6 +6,7 @@ const STATUS_LABELS = {
   NOUVEAU: "Nouveau",
   CONTACTE: "Contacté",
   DEVIS_ENVOYE: "Devis envoyé",
+  EN_ATTENTE: "En attente",
   SIGNE: "Signé",
   PERDU: "Perdu",
 };

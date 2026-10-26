@@ -9,7 +9,8 @@
 //   4. 3 jours après la relance 3
 //   5. 4 jours après la relance 4  (+ tâche "Dernier appel")
 // La séquence s'arrête d'elle-même dès que le lead passe en SIGNE / PERDU
-// (ou tout autre statut), puisque seuls les leads DEVIS_ENVOYE sont traités.
+// / EN_ATTENTE (ou tout autre statut), puisque seuls les leads DEVIS_ENVOYE
+// sont traités.
 // Aucun envoi le samedi ni le dimanche (les relances sont décalées au lundi).
 // Le job est idempotent : relancé plusieurs fois le même jour, il n'envoie
 // jamais deux fois la même relance.

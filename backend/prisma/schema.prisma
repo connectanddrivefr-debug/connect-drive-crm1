@@ -56,6 +56,10 @@ enum LeadStatus {
   NOUVEAU
   CONTACTE
   DEVIS_ENVOYE
+  // Projet en attente côté client (attend son véhicule, un financement…) :
+  // ni perdu ni actif. Les relances automatiques de devis sont suspendues
+  // (seuls les leads DEVIS_ENVOYE sont relancés, voir jobs/quoteReminders.js).
+  EN_ATTENTE
   SIGNE
   PERDU
 }
@@ -148,6 +152,13 @@ model Lead {
   // supplémentaire à côté du badge de source, en plus de la valeur de source.
   sourceDetail  String?
   status        LeadStatus @default(NOUVEAU)
+
+  // Statut EN_ATTENTE : motif et date de reprise prévue (optionnelle). À la
+  // date de reprise, le lead apparaît dans "Clients à rappeler" (Rappels).
+  // Effacés automatiquement quand le lead sort du statut EN_ATTENTE.
+  onHoldReason  String?
+  onHoldUntil   DateTime?
+  onHoldAt      DateTime?
 
   // Client professionnel (entreprise) plutôt que particulier — affiché
   // comme étiquette "Pro" sur la carte et la fiche du lead.

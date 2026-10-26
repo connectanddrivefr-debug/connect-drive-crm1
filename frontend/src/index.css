@@ -515,3 +515,12 @@ main { padding: 24px; max-width: 1400px; margin: 0 auto; }
 .new-client-form input, .new-client-form select { padding: 8px 9px; border: 1px solid var(--border); border-radius: 6px; min-width: 0; }
 .new-client-form label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
 .new-client-form p { margin: 2px 0; }
+
+/* Statut "En attente" (projet suspendu côté client) */
+.lead-card-onhold { color: #475569; font-style: italic; }
+.onhold-callout {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: var(--radius-md);
+  padding: 12px 16px; margin-bottom: 16px; color: #334155;
+}
+.onhold-callout-meta { font-size: 13px; color: #64748b; margin-top: 4px; }

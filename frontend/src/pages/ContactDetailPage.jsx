@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { api } from "../api/client";
+import OnHoldModal from "../components/OnHoldModal";
 
 const STATUS_LABELS = {
   NOUVEAU: "Nouveau",
   CONTACTE: "Contacté",
   DEVIS_ENVOYE: "Devis envoyé",
+  EN_ATTENTE: "En attente",
   SIGNE: "Signé",
   PERDU: "Perdu",
 };
@@ -111,6 +113,7 @@ export default function ContactDetailPage() {
   const [visitDate, setVisitDate] = useState("");
   const [installationDate, setInstallationDate] = useState("");
   const [callbackDate, setCallbackDate] = useState("");
+  const [showOnHold, setShowOnHold] = useState(false);
   const [depositAmountInput, setDepositAmountInput] = useState("");
   const [balanceAmountInput, setBalanceAmountInput] = useState("");
   const [paymentLoading, setPaymentLoading] = useState(null); // "deposit" | "balance" | null
@@ -260,6 +263,10 @@ export default function ContactDetailPage() {
   if (!lead) return <p>Chargement…</p>;
 
   async function changeStatus(status) {
+    if (status === "EN_ATTENTE") {
+      setShowOnHold(true);
+      return;
+    }
     await api.updateLeadStatus(id, status);
     load();
   }
@@ -362,6 +369,33 @@ export default function ContactDetailPage() {
           </button>
         ))}
       </div>
+
+      {lead.status === "EN_ATTENTE" && (
+        <div className="onhold-callout">
+          <div>
+            <strong>⏸ Projet en attente</strong>
+            {lead.onHoldReason && <> — {lead.onHoldReason}</>}
+            <div className="onhold-callout-meta">
+              {lead.onHoldAt && <>Depuis le {new Date(lead.onHoldAt).toLocaleDateString("fr-FR")}</>}
+              {lead.onHoldUntil && <> · À recontacter le {new Date(lead.onHoldUntil).toLocaleDateString("fr-FR")}</>}
+              {" · "}Relances automatiques suspendues
+            </div>
+          </div>
+          <button type="button" className="btn-ghost" onClick={() => setShowOnHold(true)}>Modifier</button>
+        </div>
+      )}
+
+      {showOnHold && (
+        <OnHoldModal
+          lead={lead}
+          onClose={() => setShowOnHold(false)}
+          onConfirm={async (extra) => {
+            await api.updateLeadStatus(id, "EN_ATTENTE", extra);
+            setShowOnHold(false);
+            load();
+          }}
+        />
+      )}
 
       <div className="contact-grid">
         <section className="card">

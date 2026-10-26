@@ -2,11 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, getCurrentUser } from "../api/client";
 import NewLeadModal from "../components/NewLeadModal";
+import OnHoldModal from "../components/OnHoldModal";
 
 const COLUMNS = [
   { key: "NOUVEAU", label: "Nouveau" },
   { key: "CONTACTE", label: "Contacté" },
   { key: "DEVIS_ENVOYE", label: "Devis envoyé" },
+  { key: "EN_ATTENTE", label: "En attente" },
   { key: "SIGNE", label: "Signé" },
   { key: "PERDU", label: "Perdu" },
 ];
@@ -24,6 +26,9 @@ export default function KanbanPage() {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [dragOverCol, setDragOverCol] = useState(null);
+  // Lead déposé dans la colonne "En attente": on demande le motif et la date
+  // de reprise avant d'enregistrer le changement de statut.
+  const [onHoldLead, setOnHoldLead] = useState(null);
   const [users, setUsers] = useState(null); // liste des commerciaux, admin uniquement
   const [assigneeFilter, setAssigneeFilter] = useState("ALL"); // ALL | ME | UNASSIGNED | <userId>
   const currentMonthStr = useMemo(() => new Date().toISOString().slice(0, 7), []);
@@ -111,6 +116,12 @@ export default function KanbanPage() {
     setDragOverCol(null);
     const leadId = window.__draggedLeadId;
     if (!leadId) return;
+
+    if (status === "EN_ATTENTE") {
+      const lead = leads.find((l) => l.id === leadId);
+      if (lead && lead.status !== "EN_ATTENTE") setOnHoldLead(lead);
+      return;
+    }
 
     // Optimistic update
     setLeads((prev) => prev.map((l) => (l.id === leadId ? { ...l, status } : l)));
@@ -271,6 +282,12 @@ export default function KanbanPage() {
                       {isSigneCol && lead.signedAt && (
                         <div className="lead-card-meta">Signé le {new Date(lead.signedAt).toLocaleDateString("fr-FR")}</div>
                       )}
+                      {lead.status === "EN_ATTENTE" && (lead.onHoldReason || lead.onHoldUntil) && (
+                        <div className="lead-card-meta lead-card-onhold">
+                          ⏸ {lead.onHoldReason || "En attente"}
+                          {lead.onHoldUntil && <> · reprise le {new Date(lead.onHoldUntil).toLocaleDateString("fr-FR")}</>}
+                        </div>
+                      )}
                       <div className="lead-card-badges">
                         <span className={`badge badge-${lead.source.toLowerCase()}`}>{lead.source}</span>
                         {lead.sourceDetail && <span className="badge">{lead.sourceDetail}</span>}
@@ -297,6 +314,18 @@ export default function KanbanPage() {
             );
           })}
         </div>
+      )}
+
+      {onHoldLead && (
+        <OnHoldModal
+          lead={onHoldLead}
+          onClose={() => setOnHoldLead(null)}
+          onConfirm={async (extra) => {
+            await api.updateLeadStatus(onHoldLead.id, "EN_ATTENTE", extra);
+            setOnHoldLead(null);
+            load();
+          }}
+        />
       )}
 
       {showModal && (

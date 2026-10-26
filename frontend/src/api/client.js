@@ -47,7 +47,7 @@ export const api = {
   createLead: (data) => request("/leads", { method: "POST", body: data }),
   updateLead: (id, data) => request(`/leads/${id}`, { method: "PATCH", body: data }),
   deleteLead: (id) => request(`/leads/${id}`, { method: "DELETE" }),
-  updateLeadStatus: (id, status) => request(`/leads/${id}/status`, { method: "PATCH", body: { status } }),
+  updateLeadStatus: (id, status, extra = {}) => request(`/leads/${id}/status`, { method: "PATCH", body: { status, ...extra } }),
   addNote: (id, content) => request(`/leads/${id}/notes`, { method: "POST", body: { content } }),
   addCall: (id, summary) => request(`/leads/${id}/calls`, { method: "POST", body: { summary } }),
 
