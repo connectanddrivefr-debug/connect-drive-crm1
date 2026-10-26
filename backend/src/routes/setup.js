@@ -33,33 +33,6 @@ router.get("/seed-admin", async (req, res) => {
   res.json({ ok: true, email: user.email });
 });
 
-// TEMPORAIRE — réinitialisation du mot de passe d'un compte admin. Le hash
-// bcrypt du nouveau mot de passe est fourni par la variable RESET_PASSWORD_HASH
-// (jamais le mot de passe en clair). Route retirée juste après usage.
-// GET /api/setup/reset-admin-password?token=<RESET_TOKEN>&email=<email>
-router.get("/reset-admin-password", async (req, res) => {
-  const expected = process.env.RESET_TOKEN || "";
-  const provided = String(req.query.token || "");
-  const ok =
-    expected.length >= 24 &&
-    provided.length === expected.length &&
-    crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(expected));
-  if (!ok || !process.env.RESET_PASSWORD_HASH) {
-    return res.status(401).json({ error: "Non autorisé" });
-  }
-  const email = String(req.query.email || "").trim().toLowerCase();
-  const admins = await prisma.user.findMany({ where: { role: "ADMIN" }, select: { email: true, firstName: true } });
-  const target = admins.find((u) => u.email.toLowerCase() === email);
-  if (!target) {
-    return res.status(404).json({ error: "Compte admin introuvable", admins });
-  }
-  await prisma.user.update({
-    where: { email: target.email },
-    data: { passwordHash: process.env.RESET_PASSWORD_HASH },
-  });
-  res.json({ ok: true, email: target.email });
-});
-
 // Création rapide d'un compte (Phase 2: Commercial/Technicien) tant qu'il n'y
 // a pas d'écran admin dédié. Génère un mot de passe aléatoire et le renvoie
 // une seule fois dans la réponse — à transmettre à la personne concernée.
