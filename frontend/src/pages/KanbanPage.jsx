@@ -484,6 +484,8 @@ export default function KanbanPage() {
                         {lead.depositStatus === "PAYE" && <span className="badge badge-payment-paye">Acompte payé</span>}
                         {lead.balanceStatus === "PAYE" && <span className="badge badge-payment-paye">Solde payé</span>}
                       </div>
+                      {(lead.estimatedPrice != null || lead.phone) && (
+                      <div className="lead-card-foot">
                       {lead.estimatedPrice != null && (
                         <span className="lead-card-price">{Number(lead.estimatedPrice).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span>
                       )}
@@ -510,6 +512,8 @@ export default function KanbanPage() {
                             </button>
                           )}
                         </div>
+                      )}
+                      </div>
                       )}
                     </Link>
                     );

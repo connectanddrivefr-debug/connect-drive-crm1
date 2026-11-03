@@ -629,6 +629,31 @@ button.kpi-card.active { box-shadow: 0 0 0 2px #e0a04f; }
 .icon-btn-wa { background: #dcf5e3; color: #128c4a; }
 .icon-btn-wa:hover { background: #c6eed3; }
 
+/* Pipeline compact : les 6 colonnes tiennent sur un écran */
+main:has(.kanban-page) { max-width: none; padding-left: 20px; padding-right: 20px; }
+.kanban-board { display: grid; grid-template-columns: repeat(6, minmax(190px, 1fr)); gap: 10px; }
+.kanban-column { width: auto; min-width: 0; padding: 6px; gap: 6px; border-radius: 16px; max-height: calc(100vh - 250px); }
+.kanban-column-header { padding: 8px 10px; }
+.kanban-column-title { font-size: 14px; }
+.kanban-column-hint { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kanban-column-body { gap: 6px; }
+.lead-card { padding: 9px 10px; gap: 1px; border-radius: 12px; }
+.lead-card-name { font-size: 14px; line-height: 1.25; overflow-wrap: anywhere; }
+.lead-card-meta { line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lead-card .badge { margin-top: 4px; font-size: 10px; padding: 2px 6px; }
+.lead-card .urgency { font-size: 10px; padding: 2px 7px; }
+.owner-dot { width: 24px; height: 24px; font-size: 10px; margin-right: 16px; }
+.lead-card-delete { top: 6px; right: 4px; }
+.lead-card-foot { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 6px; }
+.lead-card-foot .lead-card-price { margin-top: 0; }
+.lead-card-foot .lead-card-actions { border-top: 0; padding-top: 0; margin: 0 0 0 auto; gap: 4px; }
+.lead-card .icon-btn { width: 28px; height: 28px; border-radius: 8px; }
+.lead-card .icon-btn svg { width: 14px; height: 14px; }
+.kpi-strip { gap: 10px; margin-bottom: 14px; }
+.kpi-card { padding: 10px 16px; }
+.kpi-value { font-size: 20px; }
+@media (max-width: 1200px) { .kanban-board { grid-template-columns: repeat(6, 230px); overflow-x: auto; } }
+
 /* Glisser-déposer fluide */
 .kanban-column { transition: background-color 0.18s var(--ease), box-shadow 0.18s var(--ease); }
 .lead-card.dragging { opacity: 0.35; transform: scale(0.98); box-shadow: none; }

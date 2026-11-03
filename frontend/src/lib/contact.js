@@ -45,8 +45,10 @@ export function whatsAppUrl(lead, senderFirstName) {
 
 export function initials(user) {
   if (!user) return "";
-  const a = (user.firstName || "").trim().charAt(0);
-  const b = (user.lastName || "").trim().charAt(0);
+  // Lettres uniquement (ex. nom "-" pour Ilham → "I" et non "I-").
+  const letter = (s) => (String(s || "").match(/\p{L}/u) || [""])[0];
+  const a = letter(user.firstName);
+  const b = letter(user.lastName);
   return (a + b).toUpperCase() || "?";
 }
 
