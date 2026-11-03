@@ -265,11 +265,21 @@ export default function ContactDetailPage() {
   if (!lead) return <p>Chargement…</p>;
 
   async function changeStatus(status) {
+    if (status === lead.status) return;
     if (status === "EN_ATTENTE") {
       setShowOnHold(true);
       return;
     }
-    await api.updateLeadStatus(id, status);
+    // Le bouton d'étape change tout de suite, l'enregistrement suit.
+    const before = lead;
+    setLead((l) => ({ ...l, status }));
+    try {
+      await api.updateLeadStatus(id, status);
+    } catch (err) {
+      setLead(before);
+      alert(`Erreur: ${err.message}`);
+      return;
+    }
     load();
   }
 

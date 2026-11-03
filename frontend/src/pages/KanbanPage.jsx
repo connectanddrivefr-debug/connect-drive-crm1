@@ -57,6 +57,11 @@ export default function KanbanPage() {
   // Filtre d'affichage "Urgents seulement" (rappels du jour/en retard, leads
   // non contactés, devis sans réponse…) — n'affecte aucune donnée.
   const [urgentOnly, setUrgentOnly] = useState(false);
+  // Fluidité du glisser-déposer: carte en cours de déplacement, carte qui
+  // vient d'arriver (surbrillance) et petite confirmation avec "Annuler".
+  const [draggingId, setDraggingId] = useState(null);
+  const [justMovedId, setJustMovedId] = useState(null);
+  const [toast, setToast] = useState(null); // { text, undo: lead avant déplacement }
 
   const currentUser = getCurrentUser();
 
@@ -173,25 +178,80 @@ export default function KanbanPage() {
     }
   }
 
+  // Ce que le serveur va poser lui-même au changement de statut (voir
+  // PATCH /api/leads/:id/status) : appliqué tout de suite à l'écran pour que
+  // la carte arrive directement au bon endroit (ex. mois en cours de "Signé").
+  function predictStatusChange(lead, status) {
+    const now = new Date().toISOString();
+    return {
+      ...lead,
+      status,
+      ...(status === "SIGNE" && lead.status !== "SIGNE" ? { signedAt: now } : {}),
+      ...(status !== "SIGNE" && lead.status === "SIGNE" ? { signedAt: null } : {}),
+      ...(status === "DEVIS_ENVOYE" && lead.status !== "DEVIS_ENVOYE" ? { quoteFollowupStartedAt: now, quoteFollowupStep: 0 } : {}),
+      ...(status !== "EN_ATTENTE" && lead.status === "EN_ATTENTE" ? { onHoldReason: null, onHoldUntil: null, onHoldAt: null } : {}),
+    };
+  }
+
+  function flashMoved(leadId) {
+    setJustMovedId(leadId);
+    clearTimeout(window.__justMovedTimer);
+    window.__justMovedTimer = setTimeout(() => setJustMovedId(null), 1200);
+  }
+
+  function showToast(t) {
+    setToast(t);
+    clearTimeout(window.__toastTimer);
+    window.__toastTimer = setTimeout(() => setToast(null), 5000);
+  }
+
+  // Déplace un lead: mise à jour immédiate à l'écran, enregistrement en
+  // arrière-plan, puis on garde la version renvoyée par le serveur.
+  async function moveLead(lead, status, extra = {}, { withUndo = true } = {}) {
+    const before = lead;
+    setLeads((prev) => prev.map((l) => (l.id === lead.id ? { ...predictStatusChange(l, status), ...extra } : l)));
+    flashMoved(lead.id);
+    if (withUndo) {
+      const label = COLUMNS.find((c) => c.key === status)?.label || status;
+      const name = `${lead.firstName || ""} ${lead.lastName || ""}`.trim() || lead.email;
+      showToast({ text: `${name} → ${label}`, undo: before });
+    }
+    try {
+      const saved = await api.updateLeadStatus(lead.id, status, extra);
+      if (saved) setLeads((prev) => prev.map((l) => (l.id === lead.id ? { ...l, ...saved } : l)));
+    } catch (err) {
+      setLeads((prev) => prev.map((l) => (l.id === lead.id ? before : l)));
+      setToast(null);
+      alert(`Erreur: ${err.message}`);
+    }
+  }
+
+  async function undoMove() {
+    const before = toast?.undo;
+    setToast(null);
+    if (!before) return;
+    const extra = before.status === "EN_ATTENTE"
+      ? { onHoldReason: before.onHoldReason || null, onHoldUntil: before.onHoldUntil || null }
+      : {};
+    await moveLead(before, before.status, extra, { withUndo: false });
+  }
+
   async function handleDrop(status) {
     setDragOverCol(null);
+    setDraggingId(null);
     const leadId = window.__draggedLeadId;
+    window.__draggedLeadId = null;
     if (!leadId) return;
+    const lead = leads.find((l) => l.id === leadId);
+    // Carte reposée dans sa propre colonne: rien à enregistrer.
+    if (!lead || lead.status === status) return;
 
     if (status === "EN_ATTENTE") {
-      const lead = leads.find((l) => l.id === leadId);
-      if (lead && lead.status !== "EN_ATTENTE") setOnHoldLead(lead);
+      setOnHoldLead(lead);
       return;
     }
 
-    // Optimistic update
-    setLeads((prev) => prev.map((l) => (l.id === leadId ? { ...l, status } : l)));
-    try {
-      await api.updateLeadStatus(leadId, status);
-    } catch (err) {
-      alert(`Erreur: ${err.message}`);
-      load();
-    }
+    moveLead(lead, status);
   }
 
   return (
@@ -326,9 +386,14 @@ export default function KanbanPage() {
                 className={`kanban-column col-${col.key} ${dragOverCol === col.key ? "drag-over" : ""}`}
                 onDragOver={(e) => {
                   e.preventDefault();
-                  setDragOverCol(col.key);
+                  if (dragOverCol !== col.key) setDragOverCol(col.key);
                 }}
-                onDragLeave={() => setDragOverCol(null)}
+                onDragLeave={(e) => {
+                  // Ignorer le passage au-dessus d'une carte de la même colonne
+                  // (évite le clignotement de la surbrillance).
+                  if (e.currentTarget.contains(e.relatedTarget)) return;
+                  setDragOverCol((c) => (c === col.key ? null : c));
+                }}
                 onDrop={() => handleDrop(col.key)}
               >
                 <div className="kanban-column-header">
@@ -355,10 +420,17 @@ export default function KanbanPage() {
                     <Link
                       to={`/leads/${lead.id}`}
                       key={lead.id}
-                      className="lead-card"
+                      className={`lead-card ${draggingId === lead.id ? "dragging" : ""} ${justMovedId === lead.id ? "just-moved" : ""}`}
                       draggable
-                      onDragStart={() => {
+                      onDragStart={(e) => {
                         window.__draggedLeadId = lead.id;
+                        e.dataTransfer.effectAllowed = "move";
+                        // Laisser le navigateur capturer l'image de la carte avant de l'estomper.
+                        requestAnimationFrame(() => setDraggingId(lead.id));
+                      }}
+                      onDragEnd={() => {
+                        setDraggingId(null);
+                        setDragOverCol(null);
                       }}
                     >
                       {users && (
@@ -454,11 +526,20 @@ export default function KanbanPage() {
           lead={onHoldLead}
           onClose={() => setOnHoldLead(null)}
           onConfirm={async (extra) => {
-            await api.updateLeadStatus(onHoldLead.id, "EN_ATTENTE", extra);
+            const lead = onHoldLead;
             setOnHoldLead(null);
-            load();
+            await moveLead(lead, "EN_ATTENTE", extra);
           }}
         />
+      )}
+
+      {toast && (
+        <div className="move-toast" role="status">
+          <span>{toast.text}</span>
+          {toast.undo && (
+            <button type="button" onClick={undoMove}>Annuler</button>
+          )}
+        </div>
       )}
 
       {showModal && (
