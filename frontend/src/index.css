@@ -1,17 +1,18 @@
 :root {
-  --brand: #5b8fe0;
-  --brand-dark: #1f2b4d;
-  --bg: #f5f7fa;
+  --brand: #1f4fbf;
+  --brand-dark: #163a8f;
+  --brand-soft: #e8eefb;
+  --bg: #f3f5f9;
   --card-bg: #ffffff;
-  --border: #e2e8f0;
-  --text: #1e293b;
-  --muted: #64748b;
-  --radius-sm: 6px;
-  --radius-md: 10px;
+  --border: #e3e8f0;
+  --text: #0f172a;
+  --muted: #526077;
+  --radius-sm: 10px;
+  --radius-md: 16px;
   --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
-  --shadow-md: 0 4px 16px rgba(15, 23, 42, 0.08);
+  --shadow-md: 0 6px 20px rgba(15, 23, 42, 0.08);
   --ease: cubic-bezier(0.4, 0, 0.2, 1);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 * { box-sizing: border-box; }
@@ -524,3 +525,130 @@ main { padding: 24px; max-width: 1400px; margin: 0 auto; }
   padding: 12px 16px; margin-bottom: 16px; color: #334155;
 }
 .onhold-callout-meta { font-size: 13px; color: #64748b; margin-top: 4px; }
+
+/* ===========================================================================
+   Refonte visuelle v2 (inspirée du portail installateur V2C)
+   Uniquement de l'habillage : aucune classe existante n'est retirée, toutes
+   les fonctionnalités restent identiques. Supprimer ce bloc = retour à
+   l'ancien visuel.
+   =========================================================================== */
+h1 { letter-spacing: -0.03em; font-weight: 800; }
+h3 { font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+
+.btn-primary { border-radius: 12px; padding: 10px 18px; min-height: 40px; }
+.btn-ghost { border-radius: 12px; min-height: 40px; background: #fff; }
+.btn-danger { border-radius: 12px; min-height: 36px; }
+
+/* Barre du haut */
+.topbar { padding: 12px 24px; box-shadow: none; }
+.topbar nav { gap: 4px; }
+.topbar nav a { padding: 8px 14px; border-radius: 10px; font-weight: 600; font-size: 14px; }
+.topbar nav a:hover { background: var(--bg); color: var(--text); }
+.topbar nav a.active { background: var(--brand-soft); color: var(--brand-dark); }
+.lead-search input { border-radius: 12px; min-height: 40px; background: var(--bg); }
+
+main { padding: 28px 24px 48px; }
+
+/* Bandeau de chiffres au-dessus du pipeline */
+.kpi-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
+.kpi-card {
+  background: var(--card-bg); border-radius: var(--radius-md); padding: 14px 18px;
+  box-shadow: var(--shadow-sm); display: flex; flex-direction: column; gap: 2px;
+}
+.kpi-label { font-size: 13px; color: var(--muted); }
+.kpi-value { font-size: 24px; font-weight: 800; letter-spacing: -0.02em; }
+.kpi-value.brand { color: var(--brand); }
+.kpi-card.warn { background: #fff4e8; }
+.kpi-card.warn .kpi-label, .kpi-card.warn .kpi-value { color: #8a4200; }
+button.kpi-card { border: 0; text-align: left; cursor: pointer; font: inherit; }
+button.kpi-card.active { box-shadow: 0 0 0 2px #e0a04f; }
+@media (max-width: 900px) { .kpi-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* Filtres */
+.status-pill { padding: 8px 16px; font-weight: 600; font-size: 14px; border-color: #dce2ec; }
+.status-pill.pill-warn { background: #fff4e8; border-color: #f3c99a; color: #8a4200; }
+.status-pill.pill-warn.active { background: #e0a04f; border-color: #e0a04f; color: #fff; }
+
+/* Colonnes */
+.kanban-board { gap: 14px; padding-bottom: 8px; }
+.kanban-column {
+  background: #e9edf4; border: 0; border-radius: 18px; width: 272px; min-width: 272px; padding: 8px;
+  gap: 8px;
+}
+.kanban-column.drag-over { background: #dbe5f7; box-shadow: 0 0 0 2px var(--brand); }
+.kanban-column-header {
+  background: #fff; border: 0; border-radius: 12px; border-top: 4px solid var(--col-color, #7c93bf);
+  padding: 10px 14px; flex-direction: column; gap: 2px;
+}
+.kanban-column-title { display: flex; justify-content: space-between; align-items: center; font-weight: 800; font-size: 15px; }
+.kanban-column-header .count { background: var(--bg); color: #334155; font-weight: 700; font-size: 13px; border-radius: 999px; padding: 1px 10px; }
+.kanban-column-hint { font-size: 12px; font-weight: 500; color: var(--muted); }
+.kanban-column-monthbar { padding: 0; border: 0; }
+.kanban-column-monthbar select { background: #fff; border-radius: 10px; padding: 8px 10px; }
+.kanban-column-body { padding: 0; gap: 8px; }
+.col-NOUVEAU { --col-color: #7c93bf; }
+.col-CONTACTE { --col-color: #4f7fd9; }
+.col-DEVIS_ENVOYE { --col-color: #1f4fbf; }
+.col-EN_ATTENTE { --col-color: #e0a04f; }
+.col-SIGNE { --col-color: #0b7a4b; }
+.col-PERDU { --col-color: #9aa5b8; }
+
+/* Cartes leads */
+.lead-card { border: 0; border-radius: 14px; padding: 12px 14px; box-shadow: var(--shadow-sm); display: flex; flex-direction: column; gap: 3px; }
+.lead-card:hover { box-shadow: var(--shadow-md); }
+.lead-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.lead-card-name { font-weight: 700; font-size: 15px; }
+.lead-card-delete { top: 8px; right: 8px; }
+.lead-card-onhold { background: var(--bg); border-radius: 8px; padding: 5px 8px; margin-top: 4px; }
+.lead-card-price { margin-left: 0; margin-top: 6px; align-self: flex-start; }
+.badge { border-radius: 6px; font-weight: 600; }
+.badge-webflow { background: #e3ebfa; color: #163a8f; }
+.badge-simulateur { background: #fdebd8; color: #8a4200; }
+
+.urgency {
+  align-self: flex-start; font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 999px; margin-bottom: 2px;
+}
+.urgency-red { background: #fde4e1; color: #a3211a; }
+.urgency-orange { background: #fdebd8; color: #8a4200; }
+.urgency-blue { background: #e3ebfa; color: #163a8f; }
+.urgency-green { background: #ddf0e6; color: #075c38; }
+
+.owner-dot {
+  flex: none; width: 28px; height: 28px; border-radius: 999px; display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 800; background: var(--brand-soft); color: var(--brand-dark); margin-right: 18px;
+}
+.owner-dot.none { background: var(--bg); color: var(--muted); border: 1px dashed #b8c2d3; }
+
+.lead-card-actions { display: flex; gap: 6px; justify-content: flex-end; border-top: 1px solid #eef1f6; padding-top: 8px; margin-top: 6px; }
+.icon-btn {
+  width: 34px; height: 34px; border-radius: 10px; border: 0; display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; padding: 0;
+}
+.icon-btn-call { background: var(--brand-soft); color: var(--brand); }
+.icon-btn-call:hover { background: #d6e1f8; }
+.icon-btn-wa { background: #dcf5e3; color: #128c4a; }
+.icon-btn-wa:hover { background: #c6eed3; }
+
+/* Fiche client */
+.contact-page .contact-header { flex-wrap: wrap; }
+.contact-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: -4px 0 18px; }
+.action-btn {
+  display: inline-flex; align-items: center; gap: 8px; padding: 0 16px; min-height: 42px; border-radius: 12px;
+  font-weight: 700; font-size: 14px; text-decoration: none; border: 0; cursor: pointer;
+}
+.action-btn-call { background: var(--brand); color: #fff; }
+.action-btn-call:hover { background: var(--brand-dark); color: #fff; }
+.action-btn-mail { background: #fff; color: var(--text); border: 1px solid var(--border); }
+.action-btn-wa { background: #dcf5e3; color: #0b5e32; }
+.action-btn-wa:hover { background: #c6eed3; }
+.contact-grid { gap: 18px; }
+.card { border: 0; border-radius: 18px; padding: 22px; box-shadow: var(--shadow-sm); }
+.price-callout, .onhold-callout, .unverified-callout { border-radius: 14px; }
+.timeline li { padding: 8px 0; border-top: 1px solid #eef1f6; }
+.timeline li:first-child { border-top: 0; }
+.inline-form input, .inline-form select, .info-field select, .modal-card input, .modal-card select, .modal-card textarea { border-radius: 10px; min-height: 38px; }
+.modal-card { border-radius: 18px; }
+.stat-card { border: 0; border-radius: 16px; box-shadow: var(--shadow-sm); }
+.reminder-column { border: 0; border-radius: 18px; }
+.reminder-card { border: 0; border-radius: 14px; box-shadow: var(--shadow-sm); }
+@media (max-width: 760px) { .contact-grid { grid-template-columns: 1fr; } }

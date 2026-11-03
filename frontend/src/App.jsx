@@ -1,5 +1,5 @@
 import { Suspense, lazy } from "react";
-import { Routes, Route, Navigate, Link, useNavigate } from "react-router-dom";
+import { Routes, Route, Navigate, Link, NavLink, useNavigate } from "react-router-dom";
 import { getToken, getCurrentUser } from "./api/client";
 import LeadSearch from "./components/LeadSearch";
 
@@ -44,10 +44,10 @@ function Layout({ children }) {
           <img src="/logo.png" alt="Connect & Drive" className="brand-logo" />
         </Link>
         <nav>
-          {role !== "LOGISTIQUE" && <Link to="/">Pipeline</Link>}
-          {role !== "LOGISTIQUE" && <Link to="/rappels">Rappels</Link>}
-          {(role === "ADMIN" || role === "LOGISTIQUE") && <Link to="/stock">Stock</Link>}
-          {role !== "LOGISTIQUE" && <Link to="/dashboard">Tableau de bord</Link>}
+          {role !== "LOGISTIQUE" && <NavLink to="/" end>Pipeline</NavLink>}
+          {role !== "LOGISTIQUE" && <NavLink to="/rappels">Rappels</NavLink>}
+          {(role === "ADMIN" || role === "LOGISTIQUE") && <NavLink to="/stock">Stock</NavLink>}
+          {role !== "LOGISTIQUE" && <NavLink to="/dashboard">Tableau de bord</NavLink>}
         </nav>
         {role !== "LOGISTIQUE" && <LeadSearch />}
         {getToken() && (

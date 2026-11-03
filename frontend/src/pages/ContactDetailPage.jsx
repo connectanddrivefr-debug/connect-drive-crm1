@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { api } from "../api/client";
+import { api, getCurrentUser } from "../api/client";
 import OnHoldModal from "../components/OnHoldModal";
+import { MailIcon, PhoneIcon, WhatsAppIcon } from "../components/Icons";
+import { urgencyOf, whatsAppUrl } from "../lib/contact";
 
 const STATUS_LABELS = {
   NOUVEAU: "Nouveau",
@@ -326,6 +328,17 @@ export default function ContactDetailPage() {
     if (link && navigator.clipboard) navigator.clipboard.writeText(link).catch(() => {});
   }
 
+  const me = getCurrentUser();
+  const waUrl = whatsAppUrl(lead, me?.firstName);
+  const urgency = urgencyOf(lead);
+
+  function openWhatsApp() {
+    if (!waUrl) return;
+    window.open(waUrl, "_blank", "noopener");
+    // Trace dans les notes de la fiche, puis rafraîchissement de l'historique.
+    api.addNote(id, `💬 WhatsApp ouvert${me?.firstName ? ` par ${me.firstName}` : ""}`).then(load).catch(() => {});
+  }
+
   return (
     <div className="contact-page">
       <Link to="/" className="back-link">&larr; Retour au pipeline</Link>
@@ -335,10 +348,29 @@ export default function ContactDetailPage() {
         <span className={`badge badge-${lead.source.toLowerCase()}`}>{lead.source}</span>
         {lead.sourceDetail && <span className="badge">{lead.sourceDetail}</span>}
         {lead.isProfessional && <span className="badge badge-pro">Pro</span>}
+        {urgency && <span className={`urgency urgency-${urgency.tone}`} style={{ marginBottom: 0 }}>{urgency.text}</span>}
         {users && (
           <button type="button" className="btn-danger" onClick={handleDelete} title="Supprimer ce lead (admin uniquement)">
             Supprimer le lead
           </button>
+        )}
+      </div>
+
+      <div className="contact-actions">
+        {lead.phone && (
+          <a href={`tel:${lead.phone}`} className="action-btn action-btn-call">
+            <PhoneIcon /> Appeler
+          </a>
+        )}
+        {waUrl && (
+          <button type="button" className="action-btn action-btn-wa" onClick={openWhatsApp}>
+            <WhatsAppIcon /> WhatsApp
+          </button>
+        )}
+        {lead.email && (
+          <a href={`mailto:${lead.email}`} className="action-btn action-btn-mail">
+            <MailIcon /> E-mail
+          </a>
         )}
       </div>
 

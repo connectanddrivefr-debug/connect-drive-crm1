@@ -3,15 +3,33 @@ import { Link } from "react-router-dom";
 import { api, getCurrentUser } from "../api/client";
 import NewLeadModal from "../components/NewLeadModal";
 import OnHoldModal from "../components/OnHoldModal";
+import { initials, isUrgent, urgencyOf, whatsAppUrl } from "../lib/contact";
+import { PhoneIcon, WhatsAppIcon } from "../components/Icons";
 
 const COLUMNS = [
-  { key: "NOUVEAU", label: "Nouveau" },
-  { key: "CONTACTE", label: "Contacté" },
-  { key: "DEVIS_ENVOYE", label: "Devis envoyé" },
-  { key: "EN_ATTENTE", label: "En attente" },
-  { key: "SIGNE", label: "Signé" },
-  { key: "PERDU", label: "Perdu" },
+  { key: "NOUVEAU", label: "Nouveau", hint: "À contacter rapidement" },
+  { key: "CONTACTE", label: "Contacté", hint: "Devis à préparer" },
+  { key: "DEVIS_ENVOYE", label: "Devis envoyé", hint: "Relances automatiques actives" },
+  { key: "EN_ATTENTE", label: "En attente", hint: "Relances en pause" },
+  { key: "SIGNE", label: "Signé", hint: "Payé" },
+  { key: "PERDU", label: "Perdu", hint: "Sortis du pipeline" },
 ];
+
+// Montant de référence d'un lead: dernier devis envoyé, sinon prix estimé
+// du simulateur. Sert uniquement au bandeau de chiffres.
+function leadAmount(lead) {
+  const quotes = lead.quotes || [];
+  if (quotes.length > 0) {
+    const last = [...quotes].sort((a, b) => new Date(b.sentAt) - new Date(a.sentAt))[0];
+    return Number(last.amount) || 0;
+  }
+  return lead.estimatedPrice != null ? Number(lead.estimatedPrice) || 0 : 0;
+}
+
+function euros(n) {
+  return `${Math.round(n).toLocaleString("fr-FR")} €`;
+}
+
 
 // "2026-09" -> "Septembre 2026" — utilisé pour le sélecteur de mois de la
 // colonne "Signé" (suivi des objectifs commerciaux par mois de signature).
@@ -36,6 +54,9 @@ export default function KanbanPage() {
   // Leads simulateur avec numéro de téléphone non vérifié (Twilio) — suspicion
   // de spam, réservé à l'admin (voir GET /api/leads/unverified).
   const [unverifiedLeads, setUnverifiedLeads] = useState(null);
+  // Filtre d'affichage "Urgents seulement" (rappels du jour/en retard, leads
+  // non contactés, devis sans réponse…) — n'affecte aucune donnée.
+  const [urgentOnly, setUrgentOnly] = useState(false);
 
   const currentUser = getCurrentUser();
 
@@ -78,12 +99,52 @@ export default function KanbanPage() {
     loadUnverified();
   }, []);
 
-  const visibleLeads = useMemo(() => {
+  const assigneeLeads = useMemo(() => {
     if (assigneeFilter === "ALL") return leads;
     if (assigneeFilter === "ME") return leads.filter((l) => l.assignedToId === currentUser?.id);
     if (assigneeFilter === "UNASSIGNED") return leads.filter((l) => !l.assignedToId);
     return leads.filter((l) => l.assignedToId === assigneeFilter);
   }, [leads, assigneeFilter, currentUser]);
+
+  const visibleLeads = useMemo(
+    () => (urgentOnly ? assigneeLeads.filter((l) => isUrgent(l)) : assigneeLeads),
+    [assigneeLeads, urgentOnly]
+  );
+
+  // Bandeau de chiffres: calculé sur les leads déjà chargés (aucune requête
+  // en plus), selon le filtre commercial sélectionné.
+  const kpis = useMemo(() => {
+    const total = assigneeLeads.length;
+    const signed = assigneeLeads.filter((l) => l.status === "SIGNE");
+    const pending = assigneeLeads.filter((l) => l.status === "DEVIS_ENVOYE");
+    const signedThisMonth = signed.filter((l) => l.signedAt && l.signedAt.slice(0, 7) === currentMonthStr);
+    return {
+      rate: total > 0 ? Math.round((signed.length / total) * 100) : 0,
+      pendingAmount: pending.reduce((s, l) => s + leadAmount(l), 0),
+      signedMonthAmount: signedThisMonth.reduce((s, l) => s + leadAmount(l), 0),
+      signedMonthCount: signedThisMonth.length,
+      urgentCount: assigneeLeads.filter((l) => isUrgent(l)).length,
+    };
+  }, [assigneeLeads, currentMonthStr]);
+
+  function stopCard(e) {
+    e.preventDefault(); // ne pas ouvrir la fiche
+    e.stopPropagation();
+  }
+
+  function callLead(e, lead) {
+    stopCard(e);
+    window.location.href = `tel:${lead.phone}`;
+  }
+
+  function whatsAppLead(e, lead) {
+    stopCard(e);
+    const url = whatsAppUrl(lead, currentUser?.firstName);
+    if (!url) return;
+    window.open(url, "_blank", "noopener");
+    // Trace dans les notes de la fiche (sans bloquer l'ouverture de WhatsApp).
+    api.addNote(lead.id, `💬 WhatsApp ouvert${currentUser?.firstName ? ` par ${currentUser.firstName}` : ""}`).catch(() => {});
+  }
 
   // Mois disponibles pour la colonne "Signé": tous les mois où au moins un
   // lead (visible avec le filtre commercial courant) a été signé, plus le
@@ -140,6 +201,32 @@ export default function KanbanPage() {
         <button className="btn-primary" onClick={() => setShowModal(true)}>+ Ajouter un lead</button>
       </div>
 
+      {!loading && (
+        <div className="kpi-strip">
+          <div className="kpi-card">
+            <span className="kpi-label">Taux de signature</span>
+            <span className="kpi-value brand">{kpis.rate} %</span>
+          </div>
+          <div className="kpi-card">
+            <span className="kpi-label">Devis en cours</span>
+            <span className="kpi-value">{euros(kpis.pendingAmount)}</span>
+          </div>
+          <div className="kpi-card">
+            <span className="kpi-label">Signé ce mois · {kpis.signedMonthCount}</span>
+            <span className="kpi-value">{euros(kpis.signedMonthAmount)}</span>
+          </div>
+          <button
+            type="button"
+            className={`kpi-card warn ${urgentOnly ? "active" : ""}`}
+            onClick={() => setUrgentOnly((v) => !v)}
+            title="Afficher uniquement les leads urgents"
+          >
+            <span className="kpi-label">À traiter en priorité</span>
+            <span className="kpi-value">{kpis.urgentCount} leads</span>
+          </button>
+        </div>
+      )}
+
       {users && (
         <div className="status-selector" style={{ marginBottom: 16 }}>
           <button
@@ -170,6 +257,12 @@ export default function KanbanPage() {
             onClick={() => setAssigneeFilter("UNASSIGNED")}
           >
             Non assigné
+          </button>
+          <button
+            className={`status-pill pill-warn ${urgentOnly ? "active" : ""}`}
+            onClick={() => setUrgentOnly((v) => !v)}
+          >
+            Urgents seulement
           </button>
         </div>
       )}
@@ -230,7 +323,7 @@ export default function KanbanPage() {
             return (
               <div
                 key={col.key}
-                className={`kanban-column ${dragOverCol === col.key ? "drag-over" : ""}`}
+                className={`kanban-column col-${col.key} ${dragOverCol === col.key ? "drag-over" : ""}`}
                 onDragOver={(e) => {
                   e.preventDefault();
                   setDragOverCol(col.key);
@@ -239,8 +332,11 @@ export default function KanbanPage() {
                 onDrop={() => handleDrop(col.key)}
               >
                 <div className="kanban-column-header">
-                  <span>{col.label}</span>
-                  <span className="count">{columnLeads.length}</span>
+                  <div className="kanban-column-title">
+                    <span>{col.label}</span>
+                    <span className="count">{columnLeads.length}</span>
+                  </div>
+                  <span className="kanban-column-hint">{col.hint}</span>
                 </div>
                 {isSigneCol && (
                   <div className="kanban-column-monthbar">
@@ -252,7 +348,10 @@ export default function KanbanPage() {
                   </div>
                 )}
                 <div className="kanban-column-body">
-                  {columnLeads.map((lead) => (
+                  {columnLeads.map((lead) => {
+                    const urgency = urgencyOf(lead);
+                    const waUrl = whatsAppUrl(lead, currentUser?.firstName);
+                    return (
                     <Link
                       to={`/leads/${lead.id}`}
                       key={lead.id}
@@ -272,9 +371,18 @@ export default function KanbanPage() {
                           ×
                         </button>
                       )}
-                      <div className="lead-card-name">
-                        {lead.firstName || ""} {lead.lastName || ""}
-                        {!lead.firstName && !lead.lastName && lead.email}
+                      {urgency && <span className={`urgency urgency-${urgency.tone}`}>{urgency.text}</span>}
+                      <div className="lead-card-top">
+                        <div className="lead-card-name">
+                          {lead.firstName || ""} {lead.lastName || ""}
+                          {!lead.firstName && !lead.lastName && lead.email}
+                        </div>
+                        <span
+                          className={`owner-dot ${lead.assignedTo ? "" : "none"}`}
+                          title={lead.assignedTo ? `Assigné à ${lead.assignedTo.firstName} ${lead.assignedTo.lastName || ""}` : "Non assigné"}
+                        >
+                          {lead.assignedTo ? initials(lead.assignedTo) : "?"}
+                        </span>
                       </div>
                       {lead.company && <div className="lead-card-meta"><strong>{lead.company}</strong></div>}
                       <div className="lead-card-meta">{lead.email}</div>
@@ -307,8 +415,33 @@ export default function KanbanPage() {
                       {lead.estimatedPrice != null && (
                         <span className="lead-card-price">{Number(lead.estimatedPrice).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span>
                       )}
+                      {lead.phone && (
+                        <div className="lead-card-actions">
+                          <button
+                            type="button"
+                            className="icon-btn icon-btn-call"
+                            title={`Appeler ${lead.phone}`}
+                            aria-label="Appeler le client"
+                            onClick={(e) => callLead(e, lead)}
+                          >
+                            <PhoneIcon />
+                          </button>
+                          {waUrl && (
+                            <button
+                              type="button"
+                              className="icon-btn icon-btn-wa"
+                              title="Écrire sur WhatsApp"
+                              aria-label="Écrire au client sur WhatsApp"
+                              onClick={(e) => whatsAppLead(e, lead)}
+                            >
+                              <WhatsAppIcon />
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </Link>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             );
