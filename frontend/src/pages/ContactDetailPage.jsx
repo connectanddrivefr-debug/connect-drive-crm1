@@ -106,6 +106,8 @@ export default function ContactDetailPage() {
   const [noteText, setNoteText] = useState("");
   const [callText, setCallText] = useState("");
   const [quoteForm, setQuoteForm] = useState({ product: "V2C_TRYDAN", amount: "" });
+  // Édition en ligne d'un devis existant : { id, product, amount } ou null
+  const [editingQuote, setEditingQuote] = useState(null);
   const [users, setUsers] = useState(null); // null = pas encore chargé / pas admin
   const [editingAddress, setEditingAddress] = useState(false);
   const [addressForm, setAddressForm] = useState({ address: "", postalCode: "", city: "" });
@@ -305,6 +307,32 @@ export default function ContactDetailPage() {
     await api.createQuote({ leadId: id, product: quoteForm.product, amount: parseFloat(quoteForm.amount) });
     setQuoteForm({ product: "V2C_TRYDAN", amount: "" });
     load();
+  }
+
+  async function saveQuoteEdit(e) {
+    e.preventDefault();
+    if (!editingQuote || !editingQuote.amount) return;
+    try {
+      await api.updateQuote(editingQuote.id, {
+        product: editingQuote.product,
+        amount: parseFloat(editingQuote.amount),
+      });
+      setEditingQuote(null);
+      load();
+    } catch (err) {
+      alert(err.message || "Impossible de modifier le devis");
+    }
+  }
+
+  async function removeQuote(q) {
+    const label = `${Number(q.amount).toLocaleString("fr-FR", { minimumFractionDigits: 2 })} €`;
+    if (!window.confirm(`Supprimer le devis de ${label} ?`)) return;
+    try {
+      await api.deleteQuote(q.id);
+      load();
+    } catch (err) {
+      alert(err.message || "Impossible de supprimer le devis");
+    }
   }
 
   // Génère (ou régénère) le lien de paiement Revolut pour l'acompte ou le
@@ -727,12 +755,40 @@ export default function ContactDetailPage() {
           <h3>Devis</h3>
           {lead.quotes.length === 0 && <p className="muted">Aucun devis envoyé.</p>}
           {lead.quotes.map((q) => (
-            <div key={q.id} className="quote-row">
-              <span>{PRODUCTS.find((p) => p.value === q.product)?.label || q.product}</span>
-              <span>{Number(q.amount).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span>
-              <span className={`badge badge-quote-${q.status.toLowerCase()}`}>{q.status}</span>
-              <span className="muted">{new Date(q.sentAt).toLocaleDateString("fr-FR")}</span>
-            </div>
+            editingQuote?.id === q.id ? (
+              <form key={q.id} className="quote-row quote-row-edit" onSubmit={saveQuoteEdit}>
+                <select
+                  value={editingQuote.product}
+                  onChange={(e) => setEditingQuote((f) => ({ ...f, product: e.target.value }))}
+                >
+                  {PRODUCTS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+                </select>
+                <input
+                  type="number" step="0.01" min="0" autoFocus
+                  value={editingQuote.amount}
+                  onChange={(e) => setEditingQuote((f) => ({ ...f, amount: e.target.value }))}
+                />
+                <button type="submit" className="btn-primary quote-action">OK</button>
+                <button type="button" className="btn-ghost quote-action" onClick={() => setEditingQuote(null)}>Annuler</button>
+              </form>
+            ) : (
+              <div key={q.id} className="quote-row">
+                <span>{PRODUCTS.find((p) => p.value === q.product)?.label || q.product}</span>
+                <span>{Number(q.amount).toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</span>
+                <span className={`badge badge-quote-${q.status.toLowerCase()}`}>{q.status}</span>
+                <span className="muted">{new Date(q.sentAt).toLocaleDateString("fr-FR")}</span>
+                <span className="quote-actions">
+                  <button
+                    type="button" className="btn-ghost quote-action" title="Modifier le devis"
+                    onClick={() => setEditingQuote({ id: q.id, product: q.product, amount: String(Number(q.amount)) })}
+                  >Modifier</button>
+                  <button
+                    type="button" className="btn-danger quote-action" title="Supprimer le devis"
+                    onClick={() => removeQuote(q)}
+                  >Supprimer</button>
+                </span>
+              </div>
+            )
           ))}
           <form onSubmit={submitQuote} className="inline-form">
             <select value={quoteForm.product} onChange={(e) => setQuoteForm((f) => ({ ...f, product: e.target.value }))}>

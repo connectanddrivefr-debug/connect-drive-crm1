@@ -57,6 +57,7 @@ export const api = {
 
   createQuote: (data) => request("/quotes", { method: "POST", body: data }),
   updateQuote: (id, data) => request(`/quotes/${id}`, { method: "PATCH", body: data }),
+  deleteQuote: (id) => request(`/quotes/${id}`, { method: "DELETE" }),
 
   getStats: () => request("/dashboard/stats"),
 
