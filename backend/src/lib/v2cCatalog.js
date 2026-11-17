@@ -72,6 +72,27 @@ const V2C_REF_CODES = {
   "3770038367075": "TRYPRO32-3-SO-F", // Trydan PRO tri prise
 };
 
+// Code référence V2C de base -> EAN (Trydan / Trydan PRO, sans protections ni
+// MID): TRY[PRO]32-<1 mono|3 tri>-<SO prise|OL5 câble 5 m|OL10 câble 10 m>-F
+const BASE_CODE_EANS = {
+  "TRY32-1-SO": "3770038367013",
+  "TRY32-1-OL5": "3770038367006",
+  "TRY32-1-OL10": "3770038367143",
+  "TRY32-3-SO": "3770038367037",
+  "TRY32-3-OL5": "3770038367020",
+  "TRY32-3-OL10": "3770038367150",
+  "TRYPRO32-1-SO": "3770038367051",
+  "TRYPRO32-1-OL5": "3770038367044",
+  "TRYPRO32-1-OL10": "3770038367174",
+  "TRYPRO32-3-SO": "3770038367075",
+  "TRYPRO32-3-OL5": "3770038367068",
+  "TRYPRO32-3-OL10": "3770038367181",
+};
+function eanForRefCode(code) {
+  const m = String(code || "").toUpperCase().match(/^(TRY(?:PRO)?32-[13]-(?:SO|OL5|OL10))-F$/);
+  return m ? BASE_CODE_EANS[m[1]] || null : null;
+}
+
 let syncPromise = null;
 
 // Charge le catalogue dans ProductRef (une fois par instance du serveur).
@@ -102,6 +123,7 @@ async function syncCatalog(prisma) {
   // Bornes déjà en stock: libellé officiel, et EAN retrouvé depuis le code référence
   const labels = new Map(V2C_PRODUCTS.map(([ean, label]) => [ean, label]));
   const codeToEan = new Map(Object.entries(V2C_REF_CODES).map(([ean, code]) => [code, ean]));
+  for (const base of Object.keys(BASE_CODE_EANS)) codeToEan.set(`${base}-F`, BASE_CODE_EANS[base]);
   const stale = await prisma.charger.findMany({
     where: { OR: [{ ean: { in: eans } }, { ean: null, reference: { in: [...new Set([...byCode.keys(), ...codeToEan.keys()])] } }] },
     select: { id: true, ean: true, reference: true, model: true },
@@ -151,4 +173,4 @@ function ensureCatalog(prisma) {
   return syncPromise;
 }
 
-module.exports = { V2C_PRODUCTS, V2C_REF_CODES, ensureCatalog };
+module.exports = { V2C_PRODUCTS, V2C_REF_CODES, ensureCatalog, eanForRefCode };

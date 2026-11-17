@@ -8,7 +8,7 @@ const { requireAuth, requireRole } = require("../middleware/auth");
 const { normalizeSerial } = require("../lib/serial");
 const kraaft = require("../integrations/kraaft");
 const { ensureRef } = require("../lib/productRefs");
-const { ensureCatalog } = require("../lib/v2cCatalog");
+const { ensureCatalog, eanForRefCode } = require("../lib/v2cCatalog");
 
 const router = express.Router();
 router.use(requireAuth);
@@ -670,18 +670,32 @@ router.get("/kraaft/backfill", async (req, res) => {
     byCode.get(f.code).push(f);
   }
   const rows = [];
+  let ignored = 0;
   for (const [code, list] of byCode) {
     const last = list[list.length - 1];
-    const ref = refs.find((r) => (last.refCode && r.reference === last.refCode) || (last.ean && r.ean === last.ean)) ||
-      refs.find((r) => list.some((f) => (f.refCode && r.reference === f.refCode) || (f.ean && r.ean === f.ean))) || null;
     const charger = chargerBySn.get(code) || null;
+    const refCodes = list.map((f) => f.refCode).filter(Boolean);
+    const knownEans = list.map((f) => f.ean).filter((e) => e && refs.some((r) => r.ean === e));
+    // Seules les vraies bornes sont gardées: numéro connu du stock, ou lu avec
+    // une référence de borne (QR code V2C / code-barres du catalogue). Les
+    // autres codes (disjoncteurs, câbles, compteurs…) sont ignorés.
+    if (!charger && !refCodes.length && !knownEans.length) {
+      ignored++;
+      continue;
+    }
+    const codeEan = refCodes.map(eanForRefCode).find(Boolean);
+    const ref =
+      refs.find((r) => refCodes.includes(r.reference)) ||
+      (codeEan && refs.find((r) => r.ean === codeEan)) ||
+      refs.find((r) => knownEans.includes(r.ean)) ||
+      null;
     const roomLead = leadByRoom.get(last.roomId) || null;
     const rooms = [...new Map(list.map((f) => [f.roomId, { roomId: f.roomId, roomName: f.roomName, sentAt: f.sentAt }])).values()];
     rows.push({
       code,
       refLabel: ref ? ref.label : null,
-      refCode: last.refCode,
-      ean: last.ean,
+      refCode: refCodes[refCodes.length - 1] || null,
+      ean: ref ? ref.ean : knownEans[knownEans.length - 1] || null,
       rooms,
       sentAt: last.sentAt,
       roomId: last.roomId,
@@ -703,7 +717,7 @@ router.get("/kraaft/backfill", async (req, res) => {
     select: { id: true, serialNumber: true, model: true, status: true, technician: { select: techSelect } },
     orderBy: { serialNumber: "asc" },
   });
-  res.json({ rows, notSeen, doneAt, started: Boolean(cursor) });
+  res.json({ rows, ignored, notSeen, doneAt, started: Boolean(cursor) });
 });
 
 // POST /api/stock/kraaft/backfill/apply { items: [{ code, leadId? }] }
@@ -723,10 +737,19 @@ router.post("/kraaft/backfill/apply", async (req, res) => {
     if (!list.length) continue;
     const last = list[list.length - 1];
     const lead = it.leadId ? await prisma.lead.findUnique({ where: { id: it.leadId } }) : null;
-    const ref =
-      (last.refCode && (await prisma.productRef.findUnique({ where: { reference: last.refCode } }))) ||
-      (last.ean && (await prisma.productRef.findUnique({ where: { ean: last.ean } }))) ||
+    const refCode = list.map((f) => f.refCode).filter(Boolean).pop() || null;
+    const codeEan = eanForRefCode(refCode);
+    const eanList = list.map((f) => f.ean).filter(Boolean);
+    let ref =
+      (refCode && (await prisma.productRef.findUnique({ where: { reference: refCode } }))) ||
+      (codeEan && (await prisma.productRef.findUnique({ where: { ean: codeEan } }))) ||
       null;
+    for (const e of eanList) if (!ref) ref = await prisma.productRef.findUnique({ where: { ean: e } });
+    const exists = await prisma.charger.findUnique({ where: { serialNumber: code }, select: { id: true } });
+    if (!exists && !ref && !refCode) {
+      skipped++;
+      continue; // code qui n'est pas une borne
+    }
     const technicianId = (last.senderId && techByKraaft.get(last.senderId)?.id) || null;
     const installedAt = last.sentAt || new Date();
     const note = `Rattrapage Kraaft — photo du ${installedAt.toLocaleDateString("fr-FR")} dans « ${last.roomName || "conversation sans nom"} »`;
@@ -740,9 +763,9 @@ router.post("/kraaft/backfill/apply", async (req, res) => {
           charger = await tx.charger.create({
             data: {
               serialNumber: code,
-              model: ref ? ref.label : last.refCode ? `V2C ${last.refCode}` : "Borne (référence inconnue)",
-              ean: ref ? ref.ean : last.ean,
-              reference: ref ? ref.reference : last.refCode,
+              model: ref ? ref.label : `V2C ${refCode}`,
+              ean: ref ? ref.ean : null,
+              reference: (ref && ref.reference) || refCode,
               status: "INSTALLEE",
               notes: "Créée depuis Kraaft (borne absente du stock)",
             },

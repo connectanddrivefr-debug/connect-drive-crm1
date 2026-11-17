@@ -440,9 +440,11 @@ async function backfillScan({ budgetMs = 8000 } = {}) {
       const serials = [...new Set(texts.filter((t) => !cleanEan(t) || !/^\d+$/.test(t.trim())).map(normalizeSerial))].filter(
         (c) => c && !/^\d{8,14}$/.test(c)
       );
-      if (!serials.length) continue;
+      // Codes GS1 "(01)…" (matériel électrique) et mots isolés: pas des bornes
+      const realSerials = serials.filter((c) => !c.startsWith("("));
+      if (!realSerials.length) continue;
       const roomName = await getRoomName(ws, ev.roomId);
-      for (const code of serials) {
+      for (const code of realSerials) {
         const r = await prisma.kraaftFinding
           .create({
             data: {

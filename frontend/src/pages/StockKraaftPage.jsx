@@ -143,6 +143,9 @@ export default function StockKraaftPage() {
           <h2>
             {rows.length} borne(s) vue(s) dans Kraaft — <strong>{toFix.length}</strong> à corriger dans le stock
           </h2>
+          {report.ignored > 0 && (
+            <p className="muted">{report.ignored} autre(s) code(s) lu(s) sur les photos ignoré(s) : ce ne sont pas des bornes (disjoncteurs, câbles…).</p>
+          )}
           <div className="card" style={{ overflowX: "auto" }}>
             <table className="stock-table">
               <thead>
