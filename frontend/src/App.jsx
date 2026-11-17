@@ -13,6 +13,7 @@ const RemindersPage = lazy(() => import("./pages/RemindersPage"));
 const StockPage = lazy(() => import("./pages/StockPage"));
 const StockScanPage = lazy(() => import("./pages/StockScanPage"));
 const StockBlPage = lazy(() => import("./pages/StockBlPage"));
+const StockKraaftPage = lazy(() => import("./pages/StockKraaftPage"));
 
 function PageFallback() {
   return <p className="muted">Chargement…</p>;
@@ -122,6 +123,16 @@ export default function App() {
             <RequireAuth stock>
               <Layout>
                 <StockBlPage />
+              </Layout>
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/stock/kraaft"
+          element={
+            <RequireAuth stock>
+              <Layout>
+                <StockKraaftPage />
               </Layout>
             </RequireAuth>
           }

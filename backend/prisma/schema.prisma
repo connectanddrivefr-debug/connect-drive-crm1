@@ -508,3 +508,23 @@ model KraaftScan {
   @@unique([messageId, code])
   @@index([status])
 }
+
+// Rattrapage Kraaft: numéros de série lus sur les photos de TOUTES les
+// conversations Kraaft (y compris celles créées sans passer par le CRM).
+// Sert de rapport à valider avant de corriger le stock.
+model KraaftFinding {
+  id        String    @id @default(uuid())
+  messageId String
+  roomId    String
+  roomName  String?
+  senderId  String?
+  sentAt    DateTime?
+  code      String    // numéro de série lu
+  refCode   String?   // référence fabricant lue dans le QR code (ex. TRY32-1-SO-F)
+  ean       String?   // code-barres produit lu sur la même photo
+  applied   Boolean   @default(false)
+  createdAt DateTime  @default(now())
+
+  @@unique([messageId, code])
+  @@index([code])
+}

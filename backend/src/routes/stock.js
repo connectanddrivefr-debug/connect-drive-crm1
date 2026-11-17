@@ -607,6 +607,182 @@ router.post("/kraaft/sync", async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Rattrapage Kraaft: analyse de toutes les conversations, puis rapport à
+// valider (bornes vues installées dans Kraaft vs état du stock).
+// ---------------------------------------------------------------------------
+router.post("/kraaft/backfill/run", async (req, res) => {
+  if (!kraaft.isConfigured()) return res.status(400).json({ error: "Clé API Kraaft non configurée (KRAAFT_API_KEY)" });
+  try {
+    if (req.body && req.body.restart) await kraaft.resetBackfill();
+    res.json(await kraaft.backfillScan({ budgetMs: 8000 }));
+  } catch (err) {
+    console.error("[Kraaft] rattrapage:", err.message);
+    res.status(502).json({ error: "Lecture Kraaft interrompue (" + (err.status || "réseau") + "), relancez pour reprendre" });
+  }
+});
+
+function norm(s) {
+  return String(s || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+router.get("/kraaft/backfill", async (req, res) => {
+  const findings = await prisma.kraaftFinding.findMany({ orderBy: { sentAt: "asc" } });
+  const codes = [...new Set(findings.map((f) => f.code))];
+  const [chargers, roomLeads, techs, refs, leads, doneAt, cursor] = await Promise.all([
+    prisma.charger.findMany({
+      where: { serialNumber: { in: codes } },
+      include: { lead: { select: leadSelect }, technician: { select: techSelect } },
+    }),
+    prisma.lead.findMany({ where: { kraaftRoomId: { in: [...new Set(findings.map((f) => f.roomId))] } }, select: { ...leadSelect, kraaftRoomId: true } }),
+    prisma.technician.findMany({ where: { kraaftUserId: { not: null } }, select: { ...techSelect, kraaftUserId: true } }),
+    prisma.productRef.findMany(),
+    prisma.lead.findMany({ where: { lastName: { not: null } }, select: leadSelect }),
+    kraaft.getState("backfillDoneAt"),
+    kraaft.getState("backfillCursor"),
+  ]);
+  const chargerBySn = new Map(chargers.map((c) => [c.serialNumber, c]));
+  const leadByRoom = new Map(roomLeads.map((l) => [l.kraaftRoomId, l]));
+  const techByKraaft = new Map(techs.map((t) => [t.kraaftUserId, t]));
+
+  // Client proposé pour une conversation sans fiche CRM: nom de famille
+  // (3 lettres min.) présent dans le nom de la conversation, s'il est unique.
+  const suggestCache = new Map();
+  function suggest(roomName) {
+    if (!roomName) return null;
+    if (suggestCache.has(roomName)) return suggestCache.get(roomName);
+    const words = new Set(norm(roomName).split(/[^a-z0-9]+/).filter((w) => w.length >= 3));
+    const hits = leads.filter((l) => {
+      const ln = norm(l.lastName).trim();
+      return ln.length >= 3 && (words.has(ln) || ln.split(/[\s-]+/).every((p) => p.length >= 3 && words.has(p)));
+    });
+    const r = hits.length === 1 ? hits[0] : null;
+    suggestCache.set(roomName, r);
+    return r;
+  }
+
+  const byCode = new Map();
+  for (const f of findings) {
+    if (!byCode.has(f.code)) byCode.set(f.code, []);
+    byCode.get(f.code).push(f);
+  }
+  const rows = [];
+  for (const [code, list] of byCode) {
+    const last = list[list.length - 1];
+    const ref = refs.find((r) => (last.refCode && r.reference === last.refCode) || (last.ean && r.ean === last.ean)) ||
+      refs.find((r) => list.some((f) => (f.refCode && r.reference === f.refCode) || (f.ean && r.ean === f.ean))) || null;
+    const charger = chargerBySn.get(code) || null;
+    const roomLead = leadByRoom.get(last.roomId) || null;
+    const rooms = [...new Map(list.map((f) => [f.roomId, { roomId: f.roomId, roomName: f.roomName, sentAt: f.sentAt }])).values()];
+    rows.push({
+      code,
+      refLabel: ref ? ref.label : null,
+      refCode: last.refCode,
+      ean: last.ean,
+      rooms,
+      sentAt: last.sentAt,
+      roomId: last.roomId,
+      roomName: last.roomName,
+      technician: last.senderId ? techByKraaft.get(last.senderId) || null : null,
+      roomLead,
+      suggestedLead: roomLead ? null : suggest(last.roomName),
+      applied: list.every((f) => f.applied),
+      charger: charger
+        ? { id: charger.id, status: charger.status, model: charger.model, lead: charger.lead, technician: charger.technician }
+        : null,
+    });
+  }
+  rows.sort((a, b) => new Date(b.sentAt || 0) - new Date(a.sentAt || 0));
+
+  // Bornes du stock jamais vues dans une conversation Kraaft
+  const notSeen = await prisma.charger.findMany({
+    where: { status: { in: ["EN_STOCK", "CHEZ_TECHNICIEN"] }, serialNumber: { notIn: codes } },
+    select: { id: true, serialNumber: true, model: true, status: true, technician: { select: techSelect } },
+    orderBy: { serialNumber: "asc" },
+  });
+  res.json({ rows, notSeen, doneAt, started: Boolean(cursor) });
+});
+
+// POST /api/stock/kraaft/backfill/apply { items: [{ code, leadId? }] }
+// Passe les bornes en INSTALLEE (date et technicien de la photo Kraaft),
+// crée celles absentes du stock, corrige leur référence si la photo la donne.
+router.post("/kraaft/backfill/apply", async (req, res) => {
+  const items = Array.isArray(req.body && req.body.items) ? req.body.items : [];
+  if (!items.length) return res.status(400).json({ error: "Aucune borne sélectionnée" });
+  const techs = await prisma.technician.findMany({ where: { kraaftUserId: { not: null } } });
+  const techByKraaft = new Map(techs.map((t) => [t.kraaftUserId, t]));
+  let installed = 0;
+  let created = 0;
+  let skipped = 0;
+  for (const it of items) {
+    const code = normalizeSerial(it.code);
+    const list = await prisma.kraaftFinding.findMany({ where: { code }, orderBy: { sentAt: "asc" } });
+    if (!list.length) continue;
+    const last = list[list.length - 1];
+    const lead = it.leadId ? await prisma.lead.findUnique({ where: { id: it.leadId } }) : null;
+    const ref =
+      (last.refCode && (await prisma.productRef.findUnique({ where: { reference: last.refCode } }))) ||
+      (last.ean && (await prisma.productRef.findUnique({ where: { ean: last.ean } }))) ||
+      null;
+    const technicianId = (last.senderId && techByKraaft.get(last.senderId)?.id) || null;
+    const installedAt = last.sentAt || new Date();
+    const note = `Rattrapage Kraaft — photo du ${installedAt.toLocaleDateString("fr-FR")} dans « ${last.roomName || "conversation sans nom"} »`;
+
+    await prisma.$transaction(async (tx) => {
+      let charger = await tx.charger.findUnique({ where: { serialNumber: code } });
+      if (charger && charger.status === "INSTALLEE" && (!lead || charger.leadId === lead.id)) {
+        skipped++;
+      } else {
+        if (!charger) {
+          charger = await tx.charger.create({
+            data: {
+              serialNumber: code,
+              model: ref ? ref.label : last.refCode ? `V2C ${last.refCode}` : "Borne (référence inconnue)",
+              ean: ref ? ref.ean : last.ean,
+              reference: ref ? ref.reference : last.refCode,
+              status: "INSTALLEE",
+              notes: "Créée depuis Kraaft (borne absente du stock)",
+            },
+          });
+          created++;
+        }
+        await tx.charger.update({
+          where: { id: charger.id },
+          data: {
+            status: "INSTALLEE",
+            leadId: lead ? lead.id : charger.leadId,
+            technicianId: technicianId || charger.technicianId,
+            installedAt,
+            ...(ref && charger.ean !== ref.ean ? { ean: ref.ean, reference: ref.reference || charger.reference, model: ref.label } : {}),
+          },
+        });
+        await tx.stockMovement.create({
+          data: {
+            chargerId: charger.id,
+            type: "INSTALLATION",
+            leadId: lead ? lead.id : null,
+            technicianId: technicianId || charger.technicianId,
+            userId: req.user.id,
+            source: "KRAAFT",
+            notes: note,
+          },
+        });
+        installed++;
+      }
+      await tx.kraaftFinding.updateMany({ where: { code }, data: { applied: true } });
+    });
+    // Conversation créée à la main: on la relie au client pour les photos à venir
+    if (lead && !lead.kraaftRoomId) {
+      const used = await prisma.lead.findFirst({ where: { kraaftRoomId: last.roomId } });
+      if (!used) await prisma.lead.update({ where: { id: lead.id }, data: { kraaftRoomId: last.roomId } }).catch(() => {});
+    }
+  }
+  res.json({ installed, created, skipped });
+});
+
 router.patch("/kraaft/scans/:id", async (req, res) => {
   const scan = await prisma.kraaftScan.update({ where: { id: req.params.id }, data: { status: "TRAITEE" } }).catch(() => null);
   if (!scan) return res.status(404).json({ error: "Introuvable" });

@@ -162,6 +162,7 @@ export default function StockPage() {
           <Link to="/stock/retour" className="btn-ghost">Retour au dépôt</Link>
           <Link to="/stock/bl" className="btn-ghost">📄 Importer un BL</Link>
           <Link to="/stock/classer" className="btn-ghost">📸 Classer par étiquettes</Link>
+          <Link to="/stock/kraaft" className="btn-ghost">🔍 Rattrapage Kraaft</Link>
         </div>
       </div>
 

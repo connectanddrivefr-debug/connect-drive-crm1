@@ -145,13 +145,39 @@ async function getReader() {
   return zxingReady;
 }
 
+// Décode une image; si le numéro de série + la référence ne sont pas tous
+// trouvés, relit l'image agrandie (une photo de téléphone lue telle quelle rate
+// souvent le QR code ou lit mal le code-barres produit).
+async function decodeImage(buf) {
+  const readBarcodes = await getReader();
+  const read = async (b) =>
+    (await readBarcodes(new Uint8Array(b), { tryHarder: true, maxNumberOfSymbols: 10 })).map((r) => r.text).filter(Boolean);
+  let sharp = null;
+  try {
+    sharp = require("sharp");
+  } catch {
+    return read(buf);
+  }
+  const found = new Set();
+  const complete = () => [...found].some((t) => t.includes(";")) || ([...found].some((t) => !/^\d{8,14}$/.test(t)) && [...found].some((t) => /^\d{8,14}$/.test(t)) && found.size >= 3);
+  try {
+    const meta = await sharp(buf).metadata();
+    for (const scale of [1, 1.6]) {
+      const width = Math.round((meta.width || 1200) * scale);
+      const png = await sharp(buf).rotate().resize({ width }).grayscale().png().toBuffer();
+      (await read(png)).forEach((t) => found.add(t));
+      if (complete()) break;
+    }
+  } catch (e) {
+    (await read(buf)).forEach((t) => found.add(t));
+  }
+  return [...found];
+}
+
 async function readCodesFromImage(url) {
   const res = await fetch(url);
   if (!res.ok) return [];
-  const buf = new Uint8Array(await res.arrayBuffer());
-  const readBarcodes = await getReader();
-  const results = await readBarcodes(buf, { tryHarder: true, maxNumberOfSymbols: 10 });
-  return results.map((r) => r.text).filter(Boolean);
+  return decodeImage(Buffer.from(await res.arrayBuffer()));
 }
 
 // Mots du texte qui ressemblent à un numéro de série (lettres + chiffres, 5+)
@@ -341,6 +367,110 @@ async function syncMessages({ budgetMs = 8000 } = {}) {
   return { configured: true, processed, matched, hasMore };
 }
 
+// ---------------------------------------------------------------------------
+// Rattrapage: relit TOUT l'historique de TOUTES les conversations (y compris
+// celles créées à la main dans Kraaft, sans fiche CRM) et note chaque numéro
+// de série lu dans KraaftFinding. Ne modifie pas le stock: le rapport est
+// validé ensuite depuis la page Stock. Curseur séparé de la synchro normale.
+// ---------------------------------------------------------------------------
+const roomNames = new Map();
+async function getRoomName(ws, roomId) {
+  if (roomNames.has(roomId)) return roomNames.get(roomId);
+  let name = null;
+  try {
+    const room = await kraaft(`/workspaces/${ws}/rooms/${roomId}`);
+    name = (room && (room.name || room.title || (room.room && room.room.name))) || null;
+  } catch (e) {
+    console.error("[Kraaft] nom de conversation:", e.message);
+  }
+  roomNames.set(roomId, name);
+  return name;
+}
+
+async function backfillScan({ budgetMs = 8000 } = {}) {
+  if (!isConfigured()) return { configured: false };
+  const started = Date.now();
+  const ws = await getWorkspaceId();
+  await ensureCatalog(prisma);
+  let after = await getState("backfillCursor");
+  let processed = 0;
+  let found = 0;
+  let hasMore = true;
+  const knownEans = new Set((await prisma.productRef.findMany({ where: { ean: { not: null } }, select: { ean: true } })).map((r) => r.ean));
+
+  while (hasMore && Date.now() - started < budgetMs) {
+    const qs = new URLSearchParams({ limit: "200" });
+    if (after) qs.set("after", after);
+    const res = await kraaft(`/workspaces/${ws}/rooms/messages/events?${qs}`, { raw: true });
+    const events = await res.json();
+    const hm = (res.headers.get("x-kraaft-has-more") || "").toLowerCase();
+    hasMore = events.length > 0 && (hm === "true" || hm === "1" || events.length >= 200);
+    if (!events.length) break;
+
+    for (const ev of events) {
+      const content = ev.message && ev.message.after;
+      const relevant = ev.event === "sent" && content && ((content.type === "image" && content.file && content.file.url) || content.text);
+      if (relevant && processed > 0 && Date.now() - started > budgetMs) {
+        hasMore = true;
+        break;
+      }
+      after = ev.flake;
+      processed++;
+      if (!relevant) continue;
+
+      const texts = [];
+      if (content.type === "image" && content.file && content.file.url) {
+        try {
+          texts.push(...(await readCodesFromImage(content.file.url)));
+        } catch (e) {
+          console.error("[Kraaft] lecture image:", e.message);
+        }
+      }
+      // Numéro tapé dans le texte: retenu seulement s'il existe dans le stock
+      const tokens = [...new Set(candidateTokens(content.text).map(normalizeSerial))];
+      if (tokens.length) {
+        const known = await prisma.charger.findMany({ where: { serialNumber: { in: tokens } }, select: { serialNumber: true } });
+        texts.push(...known.map((k) => k.serialNumber));
+      }
+      if (!texts.length) continue;
+
+      const eans = texts.map(cleanEan).filter(Boolean);
+      const ean = eans.find((e) => knownEans.has(e)) || eans[0] || null;
+      const refCode = texts.map(refCodeFromLabel).find(Boolean) || null;
+      const serials = [...new Set(texts.filter((t) => !cleanEan(t) || !/^\d+$/.test(t.trim())).map(normalizeSerial))].filter(
+        (c) => c && !/^\d{8,14}$/.test(c)
+      );
+      if (!serials.length) continue;
+      const roomName = await getRoomName(ws, ev.roomId);
+      for (const code of serials) {
+        const r = await prisma.kraaftFinding
+          .create({
+            data: {
+              messageId: ev.messageId,
+              roomId: ev.roomId,
+              roomName,
+              senderId: ev.senderId || null,
+              sentAt: ev.occurredAt ? new Date(ev.occurredAt) : null,
+              code,
+              refCode,
+              ean,
+            },
+          })
+          .catch(() => null); // déjà noté
+        if (r) found++;
+      }
+    }
+    if (after) await setState("backfillCursor", after);
+  }
+  if (!hasMore) await setState("backfillDoneAt", new Date().toISOString());
+  return { configured: true, processed, found, hasMore };
+}
+
+async function resetBackfill() {
+  await prisma.kraaftState.deleteMany({ where: { key: { in: ["backfillCursor", "backfillDoneAt"] } } });
+  await prisma.kraaftFinding.deleteMany({ where: { applied: false } });
+}
+
 // Test de connexion: renvoie le nom de l'espace Kraaft, ou l'erreur.
 async function checkConnection() {
   if (!isConfigured()) return { ok: false, error: "Clé API non configurée" };
@@ -354,4 +484,14 @@ async function checkConnection() {
   }
 }
 
-module.exports = { checkConnection, isConfigured, ensureRoomForLead, syncMessages, getState, readCodesFromImage };
+module.exports = {
+  checkConnection,
+  isConfigured,
+  ensureRoomForLead,
+  syncMessages,
+  getState,
+  readCodesFromImage,
+  decodeImage,
+  backfillScan,
+  resetBackfill,
+};
