@@ -8,10 +8,16 @@ const { requireAuth, requireRole } = require("../middleware/auth");
 const { normalizeSerial } = require("../lib/serial");
 const kraaft = require("../integrations/kraaft");
 const { ensureRef } = require("../lib/productRefs");
+const { ensureCatalog } = require("../lib/v2cCatalog");
 
 const router = express.Router();
 router.use(requireAuth);
 router.use(requireRole("ADMIN", "LOGISTIQUE"));
+// Catalogue des références V2C (EAN -> libellé) chargé avant toute opération
+router.use(async (req, res, next) => {
+  await ensureCatalog(prisma);
+  next();
+});
 
 // Au-delà de ce délai, une borne détenue par un technicien sans être
 // installée remonte en alerte (risque de perte / vol).

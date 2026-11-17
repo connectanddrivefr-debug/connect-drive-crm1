@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import { normalizeSerial } from "../lib/serial";
+import { readCodes } from "../lib/labelScan";
 
-// Scanner de numéros de série en continu:
-// - caméra du téléphone (codes-barres 1D + QR + DataMatrix), sans bouton à
-//   toucher entre deux cartons: chaque code lu déclenche onScan + un bip;
+// Scanner d'étiquettes en continu:
+// - caméra du téléphone: chaque image est analysée en entier (zxing-wasm) et
+//   TOUS les codes visibles sont remontés ensemble (QR S/N + code-barres
+//   produit + code-barres S/N) -> un seul passage devant l'étiquette suffit;
 // - champ texte pour la saisie manuelle ou une douchette Bluetooth (la
 //   douchette "tape" le code puis Entrée, comme un clavier).
-// Un même code relu dans les 2,5 s est ignoré (la caméra le voit plusieurs
-// fois de suite tant que le carton reste devant l'objectif).
+// onCodes(listeDeCodesBruts) est appelé quand une image contient au moins un
+// code pas vu dans les 2,5 dernières secondes.
 
 let audioCtx = null;
 function beep(ok = true) {
@@ -33,75 +34,84 @@ function beep(ok = true) {
 
 export { beep };
 
-export default function Scanner({ onScan, disabled = false }) {
-  const regionId = useRef(`scan-${Math.random().toString(36).slice(2)}`);
-  const scannerRef = useRef(null);
-  const lastRef = useRef({ code: "", at: 0 });
-  const onScanRef = useRef(onScan);
+export default function Scanner({ onCodes, disabled = false }) {
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const streamRef = useRef(null);
+  const loopRef = useRef(null);
+  const busyRef = useRef(false);
+  const seenRef = useRef(new Map()); // code -> dernier passage (ms)
+  const onCodesRef = useRef(onCodes);
   const [cameraOn, setCameraOn] = useState(false);
   const [cameraError, setCameraError] = useState("");
   const [manual, setManual] = useState("");
   const manualRef = useRef(null);
 
-  onScanRef.current = onScan;
+  onCodesRef.current = onCodes;
 
-  function emit(raw) {
-    const code = normalizeSerial(raw);
-    if (!code) return;
+  function emit(codes, { force = false } = {}) {
     const now = Date.now();
-    if (lastRef.current.code === code && now - lastRef.current.at < 2500) return;
-    lastRef.current = { code, at: now };
-    onScanRef.current(code, raw);
+    const seen = seenRef.current;
+    const fresh = codes.some((c) => force || !seen.has(c) || now - seen.get(c) > 2500);
+    codes.forEach((c) => seen.set(c, now));
+    if (fresh) onCodesRef.current(codes);
+  }
+
+  async function tick() {
+    const video = videoRef.current;
+    if (busyRef.current || !video || video.readyState < 2) return;
+    busyRef.current = true;
+    try {
+      const w = video.videoWidth;
+      const h = video.videoHeight;
+      const scale = Math.min(1, 1600 / Math.max(w, h));
+      const canvas = canvasRef.current || (canvasRef.current = document.createElement("canvas"));
+      canvas.width = Math.round(w * scale);
+      canvas.height = Math.round(h * scale);
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const codes = await readCodes(ctx.getImageData(0, 0, canvas.width, canvas.height), { fast: true });
+      if (codes.length && streamRef.current) emit([...new Set(codes)]);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      busyRef.current = false;
+    }
   }
 
   async function startCamera() {
     setCameraError("");
     try {
-      const mod = await import("html5-qrcode");
-      const { Html5Qrcode, Html5QrcodeSupportedFormats: F } = mod;
-      const scanner = new Html5Qrcode(regionId.current, {
-        verbose: false,
-        formatsToSupport: [F.QR_CODE, F.CODE_128, F.CODE_39, F.CODE_93, F.DATA_MATRIX, F.EAN_13, F.EAN_8, F.UPC_A, F.ITF],
-        experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } },
+        audio: false,
       });
-      scannerRef.current = scanner;
-      await scanner.start(
-        { facingMode: "environment" },
-        {
-          fps: 12,
-          qrbox: (w, h) => ({ width: Math.floor(w * 0.85), height: Math.floor(Math.min(h, w) * 0.55) }),
-        },
-        (text) => emit(text),
-        () => {}
-      );
+      streamRef.current = stream;
+      const video = videoRef.current;
+      video.srcObject = stream;
+      await video.play();
       setCameraOn(true);
+      loopRef.current = setInterval(tick, 250);
     } catch (err) {
-      scannerRef.current = null;
-      setCameraOn(false);
+      stopCamera();
       setCameraError(
-        "Impossible d'ouvrir la caméra. Autorisez l'accès à la caméra pour ce site, ou utilisez la saisie manuelle / la douchette ci-dessous."
+        "Impossible d'ouvrir la caméra. Autorisez l'accès à la caméra pour ce site, ou utilisez la photo / la saisie manuelle / la douchette."
       );
       console.error(err);
     }
   }
 
-  async function stopCamera() {
-    const s = scannerRef.current;
-    scannerRef.current = null;
+  function stopCamera() {
+    clearInterval(loopRef.current);
+    loopRef.current = null;
+    const stream = streamRef.current;
+    streamRef.current = null;
+    if (stream) stream.getTracks().forEach((t) => t.stop());
+    if (videoRef.current) videoRef.current.srcObject = null;
     setCameraOn(false);
-    if (s) {
-      try {
-        await s.stop();
-        s.clear();
-      } catch {
-        /* déjà arrêtée */
-      }
-    }
   }
 
-  useEffect(() => () => {
-    stopCamera();
-  }, []);
+  useEffect(() => () => stopCamera(), []);
 
   useEffect(() => {
     if (disabled && cameraOn) stopCamera();
@@ -109,19 +119,25 @@ export default function Scanner({ onScan, disabled = false }) {
 
   function submitManual(e) {
     e.preventDefault();
-    if (!manual.trim()) return;
-    lastRef.current = { code: "", at: 0 }; // saisie volontaire: jamais ignorée
-    emit(manual);
+    const v = manual.trim();
+    if (!v) return;
+    emit([v], { force: true }); // saisie volontaire: jamais ignorée
     setManual("");
     manualRef.current && manualRef.current.focus();
   }
 
   return (
     <div className="scanner">
-      <div id={regionId.current} className={`scanner-view ${cameraOn ? "on" : ""}`} />
+      <video
+        ref={videoRef}
+        className={`scanner-view ${cameraOn ? "on" : ""}`}
+        playsInline
+        muted
+        style={{ width: "100%", borderRadius: 8, display: cameraOn ? "block" : "none" }}
+      />
       {!cameraOn ? (
         <button type="button" className="btn-ghost scanner-start" onClick={startCamera} disabled={disabled}>
-          📷 Ouvrir la caméra et scanner
+          📷 Ouvrir la caméra et scanner (étiquette entière dans le cadre)
         </button>
       ) : (
         <button type="button" className="btn-ghost scanner-stop" onClick={stopCamera}>
@@ -134,7 +150,7 @@ export default function Scanner({ onScan, disabled = false }) {
           ref={manualRef}
           value={manual}
           onChange={(e) => setManual(e.target.value)}
-          placeholder="N° de série (saisie ou douchette)"
+          placeholder="Code (saisie ou douchette : S/N ou code-barres produit)"
           autoComplete="off"
           autoCapitalize="characters"
           disabled={disabled}

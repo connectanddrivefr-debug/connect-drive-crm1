@@ -16,8 +16,9 @@
 //   KRAAFT_WORKSPACE_ID    optionnel (sinon: premier espace de la clé)
 //   KRAAFT_OWNER_USER_ID   optionnel: ID Kraaft de Julien, ajouté à chaque conversation
 const prisma = require("../lib/prisma");
-const { normalizeSerial } = require("../lib/serial");
+const { normalizeSerial, refCodeFromLabel } = require("../lib/serial");
 const { ensureRef, cleanEan } = require("../lib/productRefs");
+const { ensureCatalog } = require("../lib/v2cCatalog");
 
 const API = "https://api.kraaft.co/v1";
 const OWNER_USER_ID = process.env.KRAAFT_OWNER_USER_ID || "CGrWcMDlllZScWW78Gn3RAC5pX52";
@@ -185,6 +186,8 @@ async function handleCodes({ codes, event, lead }) {
   // Code-barres produit (EAN) photographié avec le S/N: complète la référence
   // de la borne si elle n'était pas encore connue.
   const photoEan = codes.map(cleanEan).find(Boolean) || null;
+  // QR code V2C "S/N;RÉFÉRENCE": la référence fabricant suffit si elle est connue
+  const photoCode = codes.map(refCodeFromLabel).find(Boolean) || null;
   for (const raw of codes) {
     const code = normalizeSerial(raw);
     if (!code || seen.has(code) || /^\d{8,14}$/.test(code)) continue; // ignore EAN produit
@@ -206,15 +209,29 @@ async function handleCodes({ codes, event, lead }) {
         note = "Borne déjà enregistrée comme installée chez un autre client";
       } else {
         status = "RATTACHEE";
-        if (photoEan && !charger.ean) {
-          // référence inconnue: créée avec le modèle actuel de la borne comme nom
-          const ref = await ensureRef(prisma, { ean: photoEan, label: charger.model });
-          if (ref) {
-            await prisma.charger.update({
+        await ensureCatalog(prisma);
+        const codeRef = photoCode ? await prisma.productRef.findUnique({ where: { reference: photoCode } }) : null;
+        const knownEanRef = photoEan ? await prisma.productRef.findUnique({ where: { ean: photoEan } }) : null;
+        // Le code lu sur la photo fait foi (référence du QR code connue, sinon
+        // code-barres produit): complète une référence manquante ou corrige
+        // une référence mal enregistrée.
+        let ref = codeRef || knownEanRef;
+        if (!ref && photoEan && !charger.ean) ref = await ensureRef(prisma, { ean: photoEan, label: charger.model });
+        if (ref && (ref.ean ? charger.ean !== ref.ean : charger.reference !== ref.reference)) {
+          await prisma.$transaction([
+            prisma.charger.update({
               where: { id: charger.id },
-              data: { ean: ref.ean, reference: ref.reference || charger.reference, model: ref.label },
-            });
-          }
+              data: { ean: ref.ean || charger.ean, reference: ref.reference || charger.reference, model: ref.label },
+            }),
+            prisma.stockMovement.create({
+              data: {
+                chargerId: charger.id,
+                type: "CORRECTION",
+                source: "KRAAFT",
+                notes: `Référence lue sur la photo du chantier: ${charger.model} → ${ref.label}`,
+              },
+            }),
+          ]);
         }
         if (!(charger.status === "INSTALLEE" && charger.leadId === lead.id)) {
           await prisma.$transaction([

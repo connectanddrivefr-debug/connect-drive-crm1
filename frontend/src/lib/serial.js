@@ -26,6 +26,9 @@ function normalizeSerial(raw) {
     }
   }
 
+  // QR code V2C: "NUMÉRO_DE_SÉRIE;RÉFÉRENCE" (ex. "RA9563;TRY32-1-SO-F")
+  if (s.includes(";")) s = s.split(";")[0].trim();
+
   // "SN: XXXX" / "S/N XXXX" / "Serial=XXXX" au milieu d'un texte
   const m = s.match(/(?:S\/N|SN|SERIAL(?:\s*NUMBER)?|N°\s*SÉRIE|NO\.?\s*SERIE)\s*[:=#]?\s*([A-Z0-9][A-Z0-9\-_.]{3,})/i);
   if (m) s = m[1];
@@ -33,4 +36,10 @@ function normalizeSerial(raw) {
   return s.replace(/\s+/g, "").toUpperCase();
 }
 
-export { normalizeSerial };
+// Référence fabricant contenue dans un QR code "S/N;RÉFÉRENCE" (V2C), sinon null.
+function refCodeFromLabel(raw) {
+  const parts = String(raw || "").split(";").map((p) => p.trim()).filter(Boolean);
+  return parts.length >= 2 ? parts[1].replace(/\s+/g, "").toUpperCase() : null;
+}
+
+export { normalizeSerial, refCodeFromLabel };
