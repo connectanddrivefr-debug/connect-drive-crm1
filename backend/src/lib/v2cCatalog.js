@@ -63,9 +63,13 @@ const V2C_PRODUCTS = [
 // Codes référence V2C lus dans le QR code de l'étiquette ("S/N;RÉFÉRENCE"),
 // confirmés sur des étiquettes réelles. Les autres sont appris tout seuls dès
 // qu'une étiquette est lue avec son code-barres produit.
+// (étiquette RA9563, BL V2C/SAL/39181 du 28/09/2026)
 const V2C_REF_CODES = {
-  "3770038367013": "TRY32-1-SO-F",
-  "3770038367006": "TRY32-1-OL5-F",
+  "3770038367013": "TRY32-1-SO-F", // Trydan mono prise
+  "3770038367006": "TRY32-1-OL5-F", // Trydan mono câble 5 m
+  "3770038367020": "TRY32-3-OL5-F", // Trydan tri câble 5 m
+  "3770038367051": "TRYPRO32-1-SO-F", // Trydan PRO mono prise
+  "3770038367075": "TRYPRO32-3-SO-F", // Trydan PRO tri prise
 };
 
 let syncPromise = null;
@@ -97,12 +101,13 @@ async function syncCatalog(prisma) {
   }
   // Bornes déjà en stock: libellé officiel, et EAN retrouvé depuis le code référence
   const labels = new Map(V2C_PRODUCTS.map(([ean, label]) => [ean, label]));
+  const codeToEan = new Map(Object.entries(V2C_REF_CODES).map(([ean, code]) => [code, ean]));
   const stale = await prisma.charger.findMany({
-    where: { OR: [{ ean: { in: eans } }, { ean: null, reference: { in: [...byCode.keys()] } }] },
+    where: { OR: [{ ean: { in: eans } }, { ean: null, reference: { in: [...new Set([...byCode.keys(), ...codeToEan.keys()])] } }] },
     select: { id: true, ean: true, reference: true, model: true },
   });
   for (const c of stale) {
-    const ean = c.ean || (byCode.get(c.reference) || {}).ean;
+    const ean = c.ean || codeToEan.get(c.reference) || (byCode.get(c.reference) || {}).ean;
     const label = labels.get(ean);
     if (ean && label && (c.ean !== ean || c.model !== label)) {
       await prisma.charger.update({ where: { id: c.id }, data: { ean, model: label } });

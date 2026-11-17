@@ -160,7 +160,7 @@ export default function StockPage() {
           <Link to="/stock/reception" className="btn-primary">+ Réception</Link>
           <Link to="/stock/dotation" className="btn-primary">Remettre à un technicien</Link>
           <Link to="/stock/retour" className="btn-ghost">Retour au dépôt</Link>
-          <Link to="/stock/bl" className="btn-ghost">📄 Classer avec un BL</Link>
+          <Link to="/stock/bl" className="btn-ghost">📄 Importer un BL</Link>
           <Link to="/stock/classer" className="btn-ghost">📸 Classer par étiquettes</Link>
         </div>
       </div>

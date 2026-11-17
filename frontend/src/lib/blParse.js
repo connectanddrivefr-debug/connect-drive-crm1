@@ -103,3 +103,61 @@ export function classifyFromBl(text, known) {
   }
   return { groups: [...groups.values()], found: assigned.size };
 }
+
+// ---------------------------------------------------------------------------
+// BL V2C (albarán) : chaque article est écrit
+//   [TRYPRO32-1-SO-F] TRYDAN PRO (32A, 230V ...)   10,00   Unidades
+//   Nº de serie: WDVC57, 8SJGM3, ...
+// -> { blNumber, groups: [{ reference, description, qty, serials }] }
+// Les articles sans numéro de série (câbles, accessoires) sont ignorés.
+// ---------------------------------------------------------------------------
+export function parseV2cBl(text) {
+  const t = String(text || "").replace(/\r/g, "");
+  const blMatch = t.match(/V2C\s*\/\s*SAL\s*\/\s*\d+/i);
+  const blNumber = blMatch ? blMatch[0].replace(/\s+/g, "").toUpperCase() : "";
+  const QTY = /(\d+)[,.]\d{2}\s*Unidad/i;
+  const groups = [];
+  let cur = null;
+  let inSerials = false;
+  const close = () => {
+    if (cur && cur.serials.length) {
+      cur.description = cur.description.replace(/\s+/g, " ").trim();
+      groups.push(cur);
+    }
+  };
+  for (const line of t.split("\n")) {
+    const head = line.match(/\[([A-Z0-9][A-Z0-9\-]{3,})\]/i);
+    if (head) {
+      close();
+      const q = line.match(QTY);
+      cur = {
+        reference: head[1].toUpperCase(),
+        description: line.slice(head.index + head[0].length).replace(QTY, " "),
+        qty: q ? Number(q[1]) : null,
+        serials: [],
+      };
+      inSerials = false;
+      continue;
+    }
+    if (!cur) continue;
+    let rest = line;
+    const sn = line.match(/N\s*[º°o]\s*\.?\s*de\s*serie\s*:/i);
+    if (sn) {
+      inSerials = true;
+      rest = line.slice(sn.index + sn[0].length);
+    } else if (inSerials && !/^[\sA-Z0-9,;]+$/i.test(line)) {
+      inSerials = false; // fin de la liste (pied de page...)
+    }
+    if (!inSerials) {
+      if (cur.qty === null && QTY.test(line)) cur.qty = Number(line.match(QTY)[1]);
+      if (!cur.serials.length) cur.description += " " + line.replace(QTY, " ");
+      continue;
+    }
+    for (const tok of rest.toUpperCase().split(/[\s,;]+/)) {
+      const v = tok.replace(/[^A-Z0-9]/g, "");
+      if (/^[A-Z0-9]{4,12}$/.test(v) && !cur.serials.includes(v)) cur.serials.push(v);
+    }
+  }
+  close();
+  return { blNumber, groups };
+}
